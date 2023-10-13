@@ -65,7 +65,7 @@ function ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        U, S, V = svd(Eₖ * Ωₖ, full=true)
+        U, S, V = svd(Eₖ * Ωₖ, full=false)
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
     end
