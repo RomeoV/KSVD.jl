@@ -37,3 +37,22 @@ Y = [
 sparsity_allowance = 0.2
 D, X = ksvd(Y, 5, max_iter = Int(1e10), sparsity_allowance = sparsity_allowance)
 @test sum(iszero, X) / length(X) > sparsity_allowance
+
+
+# compare error_maxtrix and error_matrix2
+Y, D, X = rand(30, 30), rand(30, 20), rand(20, 30);
+KSVD.error_matrix(Y, D, X, 10) ≈ KSVD.error_matrix2(Y, D, X, 10)
+
+# compare with tullio approach
+Eₖ = Y - D * X
+for k in 1:size(X,1)
+    # let Xₖ = (@view X[k, :]), Dₖ = (@view D[:, k])
+    @tullio Eₖ[i, j] += D[i, $k] * X[$k, j]
+    # end
+    @test Eₖ ≈ KSVD.error_matrix2(Y, D, X, k)
+    D[:, k] = rand(size(D, 1))
+    X[k, :] = rand(size(X, 2))
+    # let Xₖ = (@view X[k, :]), Dₖ = (@view D[:, k])
+    @tullio Eₖ[i, j] += -D[i, $k] * X[$k, j]
+    # end
+end

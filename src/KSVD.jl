@@ -15,6 +15,7 @@ export ksvd, matching_pursuit
 using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
+using Tullio
 
 
 include("matching_pursuit.jl")
@@ -62,7 +63,7 @@ function init_dictionary(n::Int, K::Int)
 end
 
 
-function ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+function ksvd_basic(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     for k in 1:size(X, 1)
         xₖ = X[k, :]
@@ -84,10 +85,40 @@ function ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
-            U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
     end
     return D, X
 end
+
+function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+    N = size(Y, 2)
+    Eₖ = Y - D * X
+    for k in 1:size(X, 1)
+        xₖ = X[k, :]
+        # ignore if the k-th row is zeros
+        all(iszero, xₖ) && continue
+
+        # wₖ is the column indices where the k-th row of xₖ is non-zero,
+        # which is equivalent to [i for i in N if xₖ[i] != 0]
+        wₖ = findall(!iszero, xₖ)
+
+        # Eₖ * Ωₖ implies a selection of error columns that
+        # correspond to examples that use the atom D[:, k]
+        # Eₖ = error_matrix(Y, D, X, k)
+        @tullio Eₖ[i, j] += D[i,$k] * X[$k,j]   # first hotspot
+        Ωₖ = sparse(wₖ, 1:length(wₖ), ones(length(wₖ)), N, length(wₖ))
+        # Note that S is a vector that contains diagonal elements of
+        # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
+        # Non-zero entries of X are set to
+        # the first column of V multiplied by Δ(1, 1)
+        # U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        U, S, V = tsvd(Eₖ * Ωₖ)                 # second hotspot
+        D[:, k] = U[:, 1]
+        X[k, wₖ] = V[:, 1] * S[1]
+        @tullio Eₖ[i, j] += -D[i,$k] * X[$k,j]  # third hotspot
+    end
+    return D, X
+end
+ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_opt(Y,D,X)
 
 
 """
