@@ -32,6 +32,21 @@ function error_matrix(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k
     return Y - D[:, indices] * X[indices, :]
 end
 
+function error_matrix2(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
+    return Y - (D * X - D[:, k:k] * X[k:k, :])
+end
+function error_matrix3(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
+    D = copy(D); X = copy(X);
+    D[:, k] .= 0; X[k, :] .= 0
+    return Y - D * X
+end
+function error_matrix4(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
+    mask = CUDA.CuVector(1:size(D,2) .!= k)
+    mask_lhs = reshape(mask, 1, size(D, 2))
+    mask_rhs = reshape(mask, size(X, 1), 1)
+    return Y - (D.*mask_lhs) * (mask_rhs.*X)
+end
+
 
 function init_dictionary(n::Int, K::Int)
     # D must be a full-rank matrix
@@ -66,7 +81,7 @@ function ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        U, S, V = svd(Eₖ * Ωₖ, full=false)
+        U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
             U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
