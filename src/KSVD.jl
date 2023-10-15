@@ -20,7 +20,7 @@ include("matching_pursuit.jl")
 
 const default_sparsity_allowance = 0.9
 const default_max_iter = 200
-const default_max_iter_mp = 200
+# const default_max_iter_mp = 200
 
 Random.seed!(1234)  # for stability of tests
 

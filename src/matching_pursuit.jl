@@ -3,7 +3,7 @@ using DataStructures
 # The implementation is referencing the wikipedia page
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
 
-const default_max_iter = 20
+const default_max_iter_mp = 20
 const default_tolerance = 1e-6
 
 
@@ -42,7 +42,7 @@ end
 
 """
     matching_pursuit(data::Vector, dictionary::AbstractMatrix;
-                     max_iter::Int = $default_max_iter,
+                     max_iter::Int = $default_max_iter_mp,
                      tolerance::Float64 = $default_tolerance)
 
 Find ``x`` such that ``Dx = y`` or ``Dx ≈ y`` where y is `data` and D is `dictionary`.
@@ -53,7 +53,7 @@ Find ``x`` such that ``Dx = y`` or ``Dx ≈ y`` where y is `data` and D is `dict
 ```
 """
 function matching_pursuit(data::AbstractVector, dictionary::AbstractMatrix;
-                          max_iter::Int = default_max_iter,
+                          max_iter::Int = default_max_iter_mp,
                           tolerance = default_tolerance)
 
     if tolerance <= 0
@@ -76,7 +76,7 @@ end
 
 """
     matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
-                     max_iter::Int = $default_max_iter,
+                     max_iter::Int = $default_max_iter_mp,
                      tolerance::Float64 = $default_tolerance)
 
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
@@ -87,7 +87,7 @@ Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dict
 ```
 """
 function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
-                          max_iter::Int = default_max_iter,
+                          max_iter::Int = default_max_iter_mp,
                           tolerance::Float64 = default_tolerance)
     K = size(dictionary, 2)
     N = size(data, 2)
