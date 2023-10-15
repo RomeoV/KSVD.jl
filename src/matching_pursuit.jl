@@ -2,18 +2,20 @@ using DataStructures
 
 # The implementation is referencing the wikipedia page
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
+using CUDA
+using LoopVectorization, ThreadsX
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
 
 
-function SparseArrays.sparsevec(d::DefaultDict, m::Int)
+function SparseArrays.sparsevec(d::DefaultDict{Int, Float64}, m::Int)
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
 
 
 function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
-                           max_iter::Int, tolerance::Float64)
+                           max_iter::Int, tolerance::Float64) :: SparseVector{Float64, Int}
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
@@ -27,8 +29,10 @@ function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
         # find an atom with maximum inner product
         products = dictionary' * residual
         _, maxindex = findmax(abs.(products))
+
         maxval = products[maxindex]
         atom = dictionary[:, maxindex]
+        # atom = sum(dictionary .* CUDA.CuVector(1:size(dictionary, 2) .== maxindex), dims=2)
 
         # c is the length of the projection of data onto atom
         a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
@@ -54,7 +58,7 @@ Find ``x`` such that ``Dx = y`` or ``Dx ≈ y`` where y is `data` and D is `dict
 """
 function matching_pursuit(data::AbstractVector, dictionary::AbstractMatrix;
                           max_iter::Int = default_max_iter_mp,
-                          tolerance = default_tolerance)
+                          tolerance = default_tolerance) :: SparseVector{Float64, Int}
 
     if tolerance <= 0
         throw(ArgumentError("`tolerance` must be > 0"))
@@ -92,15 +96,27 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
     K = size(dictionary, 2)
     N = size(data, 2)
 
+    X_ = ThreadsX.collect(
+        matching_pursuit_(
+                datacol,
+                dictionary,
+                max_iter,
+                tolerance
+            )
+        for datacol in eachcol(data)
+    )# |> splat(sparse_hcat)
     X = spzeros(K, N)
-
-    for i in 1:N
-        X[:, i] = matching_pursuit(
-            vec(data[:, i]),
-            dictionary,
-            max_iter = max_iter,
-            tolerance = tolerance
-        )
+    for (i, col) in enumerate(X_)
+        X[:, i] = col
     end
+
+    # Threads.@threads for i in 1:N
+    #     X[:, i] = matching_pursuit(
+    #         vec(data[:, i]),
+    #         dictionary,
+    #         max_iter = max_iter,
+    #         tolerance = tolerance
+    #     )
+    # end
     return X
 end
