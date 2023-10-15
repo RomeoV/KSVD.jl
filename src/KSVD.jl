@@ -14,6 +14,7 @@ export ksvd, matching_pursuit
 
 using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
+using TSVD
 
 
 include("matching_pursuit.jl")
@@ -68,6 +69,7 @@ function ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         U, S, V = svd(Eₖ * Ωₖ, full=false)
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
+            U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
     end
     return D, X
 end
