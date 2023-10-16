@@ -22,13 +22,15 @@ function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
     residual = copy(data)
 
     xdict = DefaultDict{Int, Float64}(0.)
+    products = similar(residual, size(dictionary, 2))
+
     for i in 1:max_iter
         if norm(residual) < tolerance
             return sparsevec(xdict, n_atoms)
         end
 
         # find an atom with maximum inner product
-        products = dictionary' * residual
+        products .= dictionary' * residual
         # maxval, maxidx = findmax(products)
         # minval, minidx = findmin(products)
         _, maxindex = findmax(abs.(products))
@@ -110,7 +112,8 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
     # data = CUDA.CuArray(data)
     # dictionary = CUDA.CuArray(dictionary)
 
-    X_ = ThreadsX.collect(
+    X_::Vector{SparseVector{Float64, Int}} = tcollect(
+    # X_::Vector{SparseVector{Float64, Int}} = ThreadsX.collect(
         matching_pursuit_(
                 datacol,
                 dictionary,
@@ -121,7 +124,7 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
     )
     X = spzeros(K, N)
     for (i, col) in enumerate(X_)
-        X[:, i] = col
+        X[:, i] = col  # this is still bad somehow...
     end
     return X
 end
