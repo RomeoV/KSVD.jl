@@ -104,7 +104,8 @@ function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # Eₖ * Ωₖ implies a selection of error columns that
         # correspond to examples that use the atom D[:, k]
         # Eₖ = error_matrix(Y, D, X, k)
-        @tullio Eₖ[i, j] += D[i,$k] * X[$k,j]   # first hotspot
+        # @tullio Eₖ[i, j] += D[i,$k] * X[$k,j]   # first hotspot
+        Eₖ += D[:, k:k] * X[k:k, :]
         Ωₖ = sparse(wₖ, 1:length(wₖ), ones(length(wₖ)), N, length(wₖ))
         # Note that S is a vector that contains diagonal elements of
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
@@ -114,7 +115,8 @@ function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         U, S, V = tsvd(Eₖ * Ωₖ)                 # second hotspot
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
-        @tullio Eₖ[i, j] += -D[i,$k] * X[$k,j]  # third hotspot
+        Eₖ -= D[:, k:k] * X[k:k, :]
+        # @tullio Eₖ[i, j] += -D[i,$k] * X[$k,j]  # third hotspot
     end
     return D, X
 end
