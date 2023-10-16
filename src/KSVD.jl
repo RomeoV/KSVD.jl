@@ -161,7 +161,7 @@ function ksvd(Y::AbstractMatrix, n_atoms::Int;
 
     for i in 1:max_iter
         X_sparse = matching_pursuit(Y, D, max_iter = max_iter_mp)
-        D, X = ksvd(Y, D, Matrix(X_sparse))
+        D, X = ksvd(Y, D, X_sparse)
 
         # return if the number of zero entries are <= max_n_zeros
         if sum(iszero, X) > max_n_zeros

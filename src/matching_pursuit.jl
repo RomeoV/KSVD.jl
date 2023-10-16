@@ -4,6 +4,7 @@ using DataStructures
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
 using CUDA
 using LoopVectorization, ThreadsX
+using LinearAlgebra
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -28,11 +29,21 @@ function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
 
         # find an atom with maximum inner product
         products = dictionary' * residual
+        # maxval, maxidx = findmax(products)
+        # minval, minidx = findmin(products)
         _, maxindex = findmax(abs.(products))
-
         maxval = products[maxindex]
         atom = dictionary[:, maxindex]
-        # atom = sum(dictionary .* CUDA.CuVector(1:size(dictionary, 2) .== maxindex), dims=2)
+
+        # # val, idx = (abs(maxval) > abs(minval) ? (maxval, maxidx) : (minval, minidx))
+        # # maxval = products[maxindex]
+        # atom = if data isa CuArray
+        #     idx = idx[1]  # is cartesian index with second element always 1
+        #     mask = CUDA.CuMatrix(I(n_atoms)[idx:idx, :])
+        #     sum(dictionary .* mask, dims=2)
+        # else
+        #     dictionary[:, idx]
+        # end
 
         # c is the length of the projection of data onto atom
         a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
@@ -96,6 +107,9 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
     K = size(dictionary, 2)
     N = size(data, 2)
 
+    # data = CUDA.CuArray(data)
+    # dictionary = CUDA.CuArray(dictionary)
+
     X_ = ThreadsX.collect(
         matching_pursuit_(
                 datacol,
@@ -104,19 +118,10 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
                 tolerance
             )
         for datacol in eachcol(data)
-    )# |> splat(sparse_hcat)
+    )
     X = spzeros(K, N)
     for (i, col) in enumerate(X_)
         X[:, i] = col
     end
-
-    # Threads.@threads for i in 1:N
-    #     X[:, i] = matching_pursuit(
-    #         vec(data[:, i]),
-    #         dictionary,
-    #         max_iter = max_iter,
-    #         tolerance = tolerance
-    #     )
-    # end
     return X
 end
