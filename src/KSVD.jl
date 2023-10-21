@@ -64,7 +64,12 @@ function init_dictionary(n::Int, K::Int)
 end
 
 
-function ksvd_basic(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+abstract type KSVDMethod end
+struct BasicKSVD <: KSVDMethod end
+struct OptimizedKSVD <: KSVDMethod end
+struct ParallelKSVD <: KSVDMethod end
+
+function ksvd(method::BasicKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     for k in 1:size(X, 1)
         xₖ = X[k, :]
@@ -83,18 +88,56 @@ function ksvd_basic(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        U, S, V = @repeat 10 try  # this can fail sometimes for bad initializations
-            tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
-        catch e
-            @retry if e isa LinearAlgebra.LAPACKException end
-        end
+        U, S, V = svd(Eₖ * Ωₖ)
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
     end
     return D, X
 end
 
-function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+    N = size(Y, 2)
+    Eₖ = Y - D * X
+    X_cpy = copy(X)
+    D_cpy = copy(D)
+    lck = Threads.SpinLock()
+    Threads.@threads for k in 1:size(X, 1)
+        xₖ = X[k, :]
+        # ignore if the k-th row is zeros
+        all(iszero, xₖ) && continue
+
+        # wₖ is the column indices where the k-th row of xₖ is non-zero,
+        # which is equivalent to [i for i in N if xₖ[i] != 0]
+        ωₖ = findall(!iszero, xₖ)
+
+        # Eₖ * Ωₖ implies a selection of error columns that
+        # correspond to examples that use the atom D[:, k]
+        # Eₖ = error_matrix(Y, D, X, k)
+        # @tullio Eₖ[i, j] += D[i,$k] * X[$k,j]   # first hotspot
+        Eₖ_local = Eₖ + D[:, k:k] * X[k:k, :]
+        Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(length(ωₖ)), N, length(ωₖ))
+        # Note that S is a vector that contains diagonal elements of
+        # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
+        # Non-zero entries of X are set to
+        # the first column of V multiplied by Δ(1, 1)
+        # U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        E_Ω = Eₖ_local * Ωₖ
+        U, S, V = if size(E_Ω, 2) < 5
+            svd(E_Ω)
+        else
+            tsvd(Eₖ * Ωₖ)                 # second hotspot
+        end
+        lock(lck) do  # I actually think we don't need this lock...
+            D_cpy[:, k] = U[:, 1]
+            X_cpy[k, ωₖ] = V[:, 1] * S[1]
+        end
+        # Eₖ -= D[:, k:k] * X[k:k, :]
+        # @tullio Eₖ[i, j] += -D[i,$k] * X[$k,j]  # third hotspot
+    end
+    return D_cpy, X_cpy
+end
+
+function ksvd(method::OptimizedKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     Eₖ = Y - D * X
     @showprogress for k in 1:size(X, 1)
@@ -130,7 +173,9 @@ function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     end
     return D, X
 end
-ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_opt(Y,D,X)
+ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKSVD(), Y,D,X)
+# ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_parallel(Y,D,X)
+# ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_parallel(Y,D,X)
 
 
 """
@@ -153,8 +198,11 @@ and returns X such that DX = Y or DX ≈ Y.
 """
 function ksvd(Y::AbstractMatrix, n_atoms::Int;
               sparsity_allowance = default_sparsity_allowance,
+              ksvd_method = OptimizedKSVD(),
+              sparse_coding_method = MatchingPursuit(),
               max_iter::Int = default_max_iter,
-              max_iter_mp::Int = default_max_iter_mp)
+              )
+              # max_iter_mp::Int = default_max_iter_mp)
 
     K = n_atoms
     n, N = size(Y)
@@ -172,8 +220,8 @@ function ksvd(Y::AbstractMatrix, n_atoms::Int;
     p = Progress(max_iter)
 
     for i in 1:max_iter
-        X_sparse = matching_pursuit(Y, D, max_iter = max_iter_mp)
-        D, X = ksvd(Y, D, X_sparse)
+        X_sparse = sparse_coding(sparse_coding_method, Y, D)
+        D, X = ksvd(ksvd_method, Y, D, X_sparse)
 
         # return if the number of zero entries are <= max_n_zeros
         if sum(iszero, X) > max_n_zeros

@@ -3,7 +3,7 @@ using DataStructures
 # The implementation is referencing the wikipedia page
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
 using CUDA
-using LoopVectorization, ThreadsX
+using LoopVectorization
 using LinearAlgebra
 using Transducers
 
@@ -15,6 +15,11 @@ function SparseArrays.sparsevec(d::DefaultDict{Int, Float64}, m::Int)
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
 
+abstract type SparseCodingMethod end
+@kwdef struct MatchingPursuit <: SparseCodingMethod
+    max_iter::Int = default_max_iter_mp
+    tolerance = default_tolerance
+end
 
 function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
                            max_iter::Int, tolerance::Float64) :: SparseVector{Float64, Int}
@@ -104,9 +109,9 @@ Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dict
 * `tolerance`: Exit when the norm of the residual < tolerance
 ```
 """
-function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
-                          max_iter::Int = default_max_iter_mp,
-                          tolerance::Float64 = default_tolerance)
+function sparse_coding(method::MatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
+                          # max_iter::Int = default_max_iter_mp,
+                          # tolerance::Float64 = default_tolerance)
     K = size(dictionary, 2)
     N = size(data, 2)
 
@@ -118,8 +123,8 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
         matching_pursuit_(
                 datacol,
                 dictionary,
-                max_iter,
-                tolerance
+                method.max_iter,
+                method.tolerance
             )
         for datacol in eachcol(data)
     )
@@ -129,3 +134,5 @@ function matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
     end
     return X
 end
+
+sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(MatchingPursuit(), data, dictionary)
