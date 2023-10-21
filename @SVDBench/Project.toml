@@ -1,0 +1,7 @@
+[deps]
+ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
+KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+TSVD = "9449cd9e-2762-5aa3-a617-5413e99d722e"
