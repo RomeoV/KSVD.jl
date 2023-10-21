@@ -82,7 +82,11 @@ function ksvd_basic(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        U, S, V = @repeat 10 try  # this can fail sometimes for bad initializations
+            tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        catch e
+            @retry if e isa LinearAlgebra.LAPACKException end
+        end
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
     end
@@ -92,7 +96,7 @@ end
 function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     Eₖ = Y - D * X
-    for k in 1:size(X, 1)
+    @showprogress for k in 1:size(X, 1)
         xₖ = X[k, :]
         # ignore if the k-th row is zeros
         all(iszero, xₖ) && continue
@@ -112,7 +116,12 @@ function ksvd_opt(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
         # U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
-        U, S, V = tsvd(Eₖ * Ωₖ)                 # second hotspot
+        E_Ω = Eₖ * Ωₖ
+        U, S, V = if size(E_Ω, 2) < 5
+            svd(E_Ω)
+        else
+            tsvd(Eₖ * Ωₖ)                 # second hotspot
+        end
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
         Eₖ -= D[:, k:k] * X[k:k, :]

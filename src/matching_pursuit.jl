@@ -5,6 +5,7 @@ using DataStructures
 using CUDA
 using LoopVectorization, ThreadsX
 using LinearAlgebra
+using Transducers
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
