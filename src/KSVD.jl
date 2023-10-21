@@ -16,6 +16,7 @@ using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
 using Tullio
+using Retry
 
 
 include("matching_pursuit.jl")
@@ -83,6 +84,12 @@ function ksvd_basic(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
         U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        U, S, V = @repeat 10 try  # this can fail sometimes for bad initializations
+            tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        catch e
+            @retry if e isa LinearAlgebra.LAPACKException end
+        end
+
         D[:, k] = U[:, 1]
         X[k, wₖ] = V[:, 1] * S[1]
     end
