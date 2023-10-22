@@ -26,14 +26,16 @@ end
     tolerance = default_tolerance
 end
 
-function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
-                           max_iter::Int, tolerance::Float64) :: SparseVector{Float64, Int}
+@inbounds function matching_pursuit_(
+        data::AbstractVector, dictionary::AbstractMatrix, DtD::AbstractMatrix,
+        max_iter::Int, tolerance::Float64) :: SparseVector{Float64, Int}
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
 
     xdict = DefaultDict{Int, Float64}(0.)
-    products = similar(residual, size(dictionary, 2))
+    products = dictionary' * residual
+    products_abs = similar(products)  # prealloc
 
     for i in 1:max_iter
         if norm(residual) < tolerance
@@ -41,10 +43,11 @@ function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
         end
 
         # find an atom with maximum inner product
-        @inbounds products .= dictionary' * residual
+        # @inbounds products .= dictionary' * residual
         # maxval, maxidx = findmax(products)
         # minval, minidx = findmin(products)
-        _, maxindex = findmax(abs.(products))
+        @inbounds products_abs .= abs.(products)
+        _, maxindex = findmax(products_abs)
         maxval = products[maxindex]
         atom = dictionary[:, maxindex]
 
@@ -61,6 +64,7 @@ function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
         # c is the length of the projection of data onto atom
         a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
         residual -= atom * a
+        products -= a * DtD[:, maxindex]
 
         xdict[maxindex] += a
     end
@@ -129,10 +133,13 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
         _ => collect
     end
 
+    DtD = dictionary'*dictionary
+
     X_::Vector{SparseVector{Float64, Int}} = collect_fn(
         matching_pursuit_(
                 datacol,
                 dictionary,
+                DtD,
                 method.max_iter,
                 method.tolerance
             )
@@ -155,4 +162,4 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     return X
 end
 
-sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(MatchingPursuit(), data, dictionary)
+sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
