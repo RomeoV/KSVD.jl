@@ -6,6 +6,7 @@ using CUDA
 using LoopVectorization
 using LinearAlgebra
 using Transducers
+using Match
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -17,6 +18,10 @@ end
 
 abstract type SparseCodingMethod end
 @kwdef struct MatchingPursuit <: SparseCodingMethod
+    max_iter::Int = default_max_iter_mp
+    tolerance = default_tolerance
+end
+@kwdef struct ParallelMatchingPursuit <: SparseCodingMethod
     max_iter::Int = default_max_iter_mp
     tolerance = default_tolerance
 end
@@ -109,7 +114,7 @@ Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dict
 * `tolerance`: Exit when the norm of the residual < tolerance
 ```
 """
-function sparse_coding(method::MatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
+function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, data::AbstractMatrix, dictionary::AbstractMatrix)
                           # max_iter::Int = default_max_iter_mp,
                           # tolerance::Float64 = default_tolerance)
     K = size(dictionary, 2)
@@ -120,6 +125,11 @@ function sparse_coding(method::MatchingPursuit, data::AbstractMatrix, dictionary
 
     X_::Vector{SparseVector{Float64, Int}} = tcollect(
     # X_::Vector{SparseVector{Float64, Int}} = ThreadsX.collect(
+    collect_fn = @match method begin
+        ::MatchingPursuit => collect
+        ::ParallelMatchingPursuit => tcollect
+        _ => collect
+    end
         matching_pursuit_(
                 datacol,
                 dictionary,
