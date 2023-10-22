@@ -41,7 +41,7 @@ function matching_pursuit_(data::AbstractVector, dictionary::AbstractMatrix,
         end
 
         # find an atom with maximum inner product
-        products .= dictionary' * residual
+        @inbounds products .= dictionary' * residual
         # maxval, maxidx = findmax(products)
         # minval, minidx = findmin(products)
         _, maxindex = findmax(abs.(products))
@@ -123,13 +123,13 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     # data = CUDA.CuArray(data)
     # dictionary = CUDA.CuArray(dictionary)
 
-    X_::Vector{SparseVector{Float64, Int}} = tcollect(
-    # X_::Vector{SparseVector{Float64, Int}} = ThreadsX.collect(
     collect_fn = @match method begin
         ::MatchingPursuit => collect
         ::ParallelMatchingPursuit => tcollect
         _ => collect
     end
+
+    X_::Vector{SparseVector{Float64, Int}} = collect_fn(
         matching_pursuit_(
                 datacol,
                 dictionary,
@@ -138,9 +138,19 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
             )
         for datacol in eachcol(data)
     )
-    X = spzeros(K, N)
-    for (i, col) in enumerate(X_)
-        X[:, i] = col  # this is still bad somehow...
+    # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
+    # I first tried `hcat(X_...)`, but it was somewhat slow.
+    # Then I tried `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` but that
+    # was also bad somehow.
+    # This version seems to overcome the type inference issues and makes the code much faster.
+    X = let
+        I = Int[]; J = Int[]; V = Float64[]
+        for (i, v) in enumerate(X_)
+            append!(I, v.nzind)
+            append!(J, fill(i, nnz(v)))
+            append!(V, v.nzval)
+        end
+        sparse(I,J,V, K, N)
     end
     return X
 end
