@@ -201,6 +201,7 @@ function ksvd(Y::AbstractMatrix, n_atoms::Int;
               ksvd_method = OptimizedKSVD(),
               sparse_coding_method = MatchingPursuit(),
               max_iter::Int = default_max_iter,
+              verbose=false
               )
               # max_iter_mp::Int = default_max_iter_mp)
 
@@ -220,7 +221,9 @@ function ksvd(Y::AbstractMatrix, n_atoms::Int;
     p = Progress(max_iter)
 
     for i in 1:max_iter
+        verbose && @info "Starting sparse coding"
         X_sparse = sparse_coding(sparse_coding_method, Y, D)
+        verbose && @info "Starting svd"
         D, X = ksvd(ksvd_method, Y, D, X_sparse)
 
         # return if the number of zero entries are <= max_n_zeros
