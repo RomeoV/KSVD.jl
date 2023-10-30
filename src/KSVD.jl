@@ -125,7 +125,7 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abs
         U, S, V = if size(E_Ω, 2) < 5
             svd(E_Ω)
         else
-            tsvd(Eₖ * Ωₖ)                 # second hotspot
+            tsvd(E_Ω)                 # second hotspot
         end
         lock(lck) do  # I actually think we don't need this lock...
             D_cpy[:, k] = U[:, 1]
