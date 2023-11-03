@@ -46,7 +46,8 @@ end
         # @inbounds products .= dictionary' * residual
         # maxval, maxidx = findmax(products)
         # minval, minidx = findmin(products)
-        @inbounds products_abs .= abs.(products)
+        # @inbounds products_abs .= abs.(products)
+        @inbounds products_abs .= (-1 .^ signbit.(products)) .* products  # basically abs. without alloc
         _, maxindex = findmax(products_abs)
         maxval = products[maxindex]
         atom = dictionary[:, maxindex]
@@ -63,8 +64,8 @@ end
 
         # c is the length of the projection of data onto atom
         a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
-        residual -= atom * a
-        products -= a * DtD[:, maxindex]
+        residual .-= a .* atom
+        @inbounds products .-= a .* @view DtD[:, maxindex]
 
         xdict[maxindex] += a
     end
