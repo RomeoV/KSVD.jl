@@ -17,6 +17,7 @@ using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
 using Tullio
 using Retry
+using FLoops
 
 
 include("matching_pursuit.jl")
@@ -100,8 +101,15 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abs
     Eₖ = Y - D * X
     X_cpy = copy(X)
     D_cpy = copy(D)
+
+    # preallocate error buffers
+    Eₖ_buffers = [copy(Eₖ) for _ in 1:Threads.nthreads()]
+    # E_Ω_buffers = [copy(Eₖ) for _ in 1:Threads.nthreads()]
+
     lck = Threads.SpinLock()
-    Threads.@threads for k in 1:size(X, 1)
+    # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
+    Threads.@threads :static for k in axes(X,1)
+    # @floop for k in 1:size(X, 1)
         xₖ = X[k, :]
         # ignore if the k-th row is zeros
         all(iszero, xₖ) && continue
@@ -109,29 +117,46 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abs
         # wₖ is the column indices where the k-th row of xₖ is non-zero,
         # which is equivalent to [i for i in N if xₖ[i] != 0]
         ωₖ = findall(!iszero, xₖ)
+        Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(length(ωₖ)), N, length(ωₖ))
 
         # Eₖ * Ωₖ implies a selection of error columns that
         # correspond to examples that use the atom D[:, k]
         # Eₖ = error_matrix(Y, D, X, k)
-        # @tullio Eₖ[i, j] += D[i,$k] * X[$k,j]   # first hotspot
-        Eₖ_local = Eₖ + D[:, k:k] * X[k:k, :]
-        Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(length(ωₖ)), N, length(ωₖ))
+        # @tullio Eₖ_local[i, j] += D[i,$k] * X[$k,j]   # first hotspot
+        # Eₖ_local .+= D[:, k:k] * X[k:k, :]
+        # Eₖ_local = copy(Eₖ)
+        Eₖ_local = Eₖ_buffers[Threads.threadid()]
+        # Eₖ_local .= Eₖ
+        for (j, X_val) in zip(findnz(X[k, :])...)
+            # @inbounds @views axpy!(X_val, D[:, k], Eₖ_local[:, j])
+            @inbounds @views Eₖ_local[:, j] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
+        end
+
         # Note that S is a vector that contains diagonal elements of
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
         # U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
+        # E_Ω = let buffer = E_Ω_buffers[Threads.threadid()]
+        #     @view buffer[:, 1:length(ωₖ)]
+        # end
         E_Ω = Eₖ_local * Ωₖ
         U, S, V = if size(E_Ω, 2) < 5
             svd(E_Ω)
         else
             tsvd(E_Ω)                 # second hotspot
         end
-        lock(lck) do  # I actually think we don't need this lock...
+        # lock(lck) do  # I actually think we don't need this lock...
             D_cpy[:, k] = U[:, 1]
-            X_cpy[k, ωₖ] = V[:, 1] * S[1]
-        end
+            # TODO: We need to write this again!
+            # X_cpy[k, ωₖ] = V[:, 1] * S[1]
+        # end
         # Eₖ -= D[:, k:k] * X[k:k, :]
+        # reverse the local error matrix to be reused without copy
+        for (j, X_val) in zip(findnz(X[k, :])...)
+            # @inbounds @views axpy!(X_val, D[:, k], Eₖ_local[:, j])
+            @inbounds @views Eₖ_local[:, j] .-=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
+        end
         # @tullio Eₖ[i, j] += -D[i,$k] * X[$k,j]  # third hotspot
     end
     return D_cpy, X_cpy
