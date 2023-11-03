@@ -32,6 +32,10 @@ end
     max_iter::Int = default_max_iter_mp
     tolerance = default_tolerance
 end
+@kwdef struct FullBatchMatchingPursuit <: SparseCodingMethod
+    max_iter::Int = default_max_iter_mp
+    tolerance = default_tolerance
+end
 
 @inbounds function matching_pursuit_(
         data::AbstractVector, dictionary::AbstractMatrix, DtD::AbstractMatrix,
@@ -59,8 +63,10 @@ end
         products_abs .= abs.(products)
         # products_abs .= products  # basically) abs. without alloc
         # products_abs .*= (-1 .^ signbit.(products))
+
         _, maxindex = findmax(products_abs)
         # maxindex = sorted_ind[i]
+
         maxval = products[maxindex]
         @inbounds atom = @view dictionary[:, maxindex]
 
