@@ -231,3 +231,29 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
 end
 
 sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
+function matching_pursuit_original_(data::AbstractVector, dictionary::AbstractMatrix,
+                           max_iter::Int, tolerance::Float64)
+    n_atoms = size(dictionary, 2)
+
+    residual = copy(data)
+
+    xdict = DefaultDict{Int, Float64}(0.)
+    for i in 1:max_iter
+        if norm(residual) < tolerance
+            return sparsevec(xdict, n_atoms)
+        end
+
+        # find an atom with maximum inner product
+        products = dictionary' * residual
+        _, maxindex = findmax(abs.(products))
+        maxval = products[maxindex]
+        atom = dictionary[:, maxindex]
+
+        # c is the length of the projection of data onto atom
+        a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
+        residual -= atom * a
+
+        xdict[maxindex] += a
+    end
+    return sparsevec(xdict, n_atoms)
+end
