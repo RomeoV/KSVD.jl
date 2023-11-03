@@ -9,6 +9,7 @@ using Transducers
 using Match
 import SparseArrays: nonzeroinds
 using FLoops, FoldsThreads, BangBang, MicroCollections
+using ThreadPools
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -202,6 +203,10 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
     # end
 
     @floop for (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
+    ThreadPools.@bthreads for j in axes(data, 2)
+    # Threads.@threads for j in axes(data, 2)
+        # (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
+        datacol = @view data[:, j]; productcol = @view products[:, j]
         data_vec = matching_pursuit_(
                         datacol,
                         dictionary,
