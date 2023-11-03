@@ -149,7 +149,9 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abs
         # lock(lck) do  # I actually think we don't need this lock...
             D_cpy[:, k] = U[:, 1]
             # TODO: We need to write this again!
-            # X_cpy[k, ωₖ] = V[:, 1] * S[1]
+        for (src_idx, target_idx) in enumerate(ωₖ)
+            @inbounds X_cpy[k, target_idx] = V[src_idx, 1] * S[1]
+        end
         # end
         # Eₖ -= D[:, k:k] * X[k:k, :]
         # reverse the local error matrix to be reused without copy
