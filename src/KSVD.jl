@@ -147,11 +147,11 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abs
             tsvd(E_Ω)                 # second hotspot
         end
         # lock(lck) do  # I actually think we don't need this lock...
-            D_cpy[:, k] = U[:, 1]
-            # TODO: We need to write this again!
-        for (src_idx, target_idx) in enumerate(ωₖ)
-            @inbounds X_cpy[k, target_idx] = V[src_idx, 1] * S[1]
-        end
+        D_cpy[:, k] = U[:, 1]
+        @inbounds @views X_cpy[k, ωₖ] .= S[1] .* V[:, 1]
+        # for (src_idx, target_idx) in enumerate(ωₖ)
+        #     @inbounds X_cpy[k, target_idx] = V[src_idx, 1] * S[1]
+        # end
         # end
         # Eₖ -= D[:, k:k] * X[k:k, :]
         # reverse the local error matrix to be reused without copy
