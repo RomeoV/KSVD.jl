@@ -202,7 +202,8 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
     #     append!(V_buffer, nonzeros(data_vec))
     # end
 
-    @floop for (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
+    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
+    # @floop for (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
     ThreadPools.@bthreads for j in axes(data, 2)
     # Threads.@threads for j in axes(data, 2)
         # (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
@@ -216,11 +217,13 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
                         products_init=productcol
                     )
         # I_buffer = I_buffers[Threads.threadid()]; J_buffer = J_buffers[Threads.threadid()]; V_buffer = V_buffers[Threads.threadid()];
-        @reduce(
-            I = append!!(EmptyVector{Int}(), nonzeroinds(data_vec)),
-            J = append!!(EmptyVector{Int}(), fill(j, nnz(data_vec))),
-            V = append!!(EmptyVector{Float64}(), nonzeros(data_vec))
-        )
+        append!(I_buffers[j], nonzeroinds(data_vec))
+        append!(V_buffers[j], nonzeros(data_vec))
+        # @reduce(
+        #     I = append!!(EmptyVector{Int}(), nonzeroinds(data_vec)),
+        #     J = append!!(EmptyVector{Int}(), fill(j, nnz(data_vec))),
+        #     V = append!!(EmptyVector{Float64}(), nonzeros(data_vec))
+        # )
     end
 
     # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
@@ -231,11 +234,58 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
     # I = vcat(I_buffers...)
     # J = vcat(J_buffers...)
     # V = vcat(V_buffers...)
+    I = vcat(I_buffers...); V = vcat(V_buffers...)
+    J = vcat([fill(j, size(I_buf)) for (j, I_buf) in enumerate(I_buffers)]...)
     X = sparse(I,J,V, K, N)
     return X
 end
 
 sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
+
+function sparse_coding(method::FullBatchMatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
+    K = size(dictionary, 2)
+    N = size(data, 2)
+    max_iter = method.max_iter
+
+    DtD = dictionary'*dictionary
+    products = dictionary' * data
+    products_abs = abs.(products)
+
+    # I = Int[]; J = Int[]; V = Float64[];
+    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
+
+    max_product_inds = sortperm.(eachcol(products_abs), rev=true)
+    @floop for data_idx in axes(data, 2)
+    # for data_idx in axes(data, 2)
+        inds = max_product_inds[data_idx][1:max_iter]
+
+        coeffs = products[inds, data_idx] ./ sum(abs2, dictionary[:, inds], dims=1)[:]
+        residuals = data[:, data_idx] .- cumsum(coeffs' .* dictionary[:, inds], dims=2)
+        residual_norms = norm.(eachcol(residuals)).^2
+        last_idx::Int = let
+            idx = findfirst(<(method.tolerance), residual_norms)
+            (isnothing(idx) ? max_iter : idx)
+        end
+
+        data_vec = sparsevec(inds[1:last_idx], coeffs[1:last_idx])
+        append!(I_buffers[data_idx], nonzeroinds(data_vec))
+        append!(V_buffers[data_idx], nonzeros(data_vec))
+        # append!(I, nonzeroinds(data_vec))
+        # append!(J, fill(data_idx, nnz(data_vec)))
+        # append!(V, nonzeros(data_vec))
+        # @reduce(
+        #     I = append!!(EmptyVector{Int}(), nonzeroinds(data_vec)),
+        #     J = append!!(EmptyVector{Int}(), fill(data_idx, nnz(data_vec))),
+        #     V = append!!(EmptyVector{Float64}(), nonzeros(data_vec))
+        # )
+    end
+    I = vcat(I_buffers...); V = vcat(V_buffers...)
+    J = vcat([fill(j, size(I_buf)) for (j, I_buf) in enumerate(I_buffers)]...)
+
+    X = sparse(I,J,V, K, N)
+    return X
+end
+
 function matching_pursuit_original_(data::AbstractVector, dictionary::AbstractMatrix,
                            max_iter::Int, tolerance::Float64)
     n_atoms = size(dictionary, 2)
