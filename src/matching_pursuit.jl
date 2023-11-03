@@ -7,6 +7,8 @@ using LoopVectorization
 using LinearAlgebra
 using Transducers
 using Match
+import SparseArrays: nonzeroinds
+using FLoops, FoldsThreads, BangBang, MicroCollections
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -22,6 +24,10 @@ abstract type SparseCodingMethod end
     tolerance = default_tolerance
 end
 @kwdef struct ParallelMatchingPursuit <: SparseCodingMethod
+    max_iter::Int = default_max_iter_mp
+    tolerance = default_tolerance
+end
+@kwdef struct FasterParallelMatchingPursuit <: SparseCodingMethod
     max_iter::Int = default_max_iter_mp
     tolerance = default_tolerance
 end
@@ -164,6 +170,63 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
         end
         sparse(I,J,V, K, N)
     end
+    return X
+end
+
+function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
+    K = size(dictionary, 2)
+    N = size(data, 2)
+
+    DtD = dictionary'*dictionary
+    products = dictionary' * data
+
+    # I_buffers = [Int[] for _ in 1:Threads.nthreads()]
+    # J_buffers = [Int[] for _ in 1:Threads.nthreads()]
+    # V_buffers = [Float64[] for _ in 1:Threads.nthreads()]
+    I = Int[]; J = Int[]; V = Float64[];
+
+    # Threads.@threads :static for j  in axes(data, 2)
+    #     datacol = @view data[:, j]; productcol = @view products[:, j]
+    #     data_vec = matching_pursuit_(
+    #                     datacol,
+    #                     dictionary,
+    #                     DtD,
+    #                     method.max_iter,
+    #                     method.tolerance,
+    #                     products_init=productcol
+    #                 )
+    #     I_buffer = I_buffers[Threads.threadid()]; J_buffer = J_buffers[Threads.threadid()]; V_buffer = V_buffers[Threads.threadid()];
+    #     append!(I_buffer, nonzeroinds(data_vec)),
+    #     append!(J_buffer, fill(j, nnz(data_vec))),
+    #     append!(V_buffer, nonzeros(data_vec))
+    # end
+
+    @floop for (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
+        data_vec = matching_pursuit_(
+                        datacol,
+                        dictionary,
+                        DtD,
+                        method.max_iter,
+                        method.tolerance,
+                        products_init=productcol
+                    )
+        # I_buffer = I_buffers[Threads.threadid()]; J_buffer = J_buffers[Threads.threadid()]; V_buffer = V_buffers[Threads.threadid()];
+        @reduce(
+            I = append!!(EmptyVector{Int}(), nonzeroinds(data_vec)),
+            J = append!!(EmptyVector{Int}(), fill(j, nnz(data_vec))),
+            V = append!!(EmptyVector{Float64}(), nonzeros(data_vec))
+        )
+    end
+
+    # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
+    # I first tried `hcat(X_...)`, but it was somewhat slow.
+    # Then I tried `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` but that
+    # was also bad somehow.
+    # This version seems to overcome the type inference issues and makes the code much faster.
+    # I = vcat(I_buffers...)
+    # J = vcat(J_buffers...)
+    # V = vcat(V_buffers...)
+    X = sparse(I,J,V, K, N)
     return X
 end
 
