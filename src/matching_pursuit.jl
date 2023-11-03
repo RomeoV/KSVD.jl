@@ -28,13 +28,14 @@ end
 
 @inbounds function matching_pursuit_(
         data::AbstractVector, dictionary::AbstractMatrix, DtD::AbstractMatrix,
-        max_iter::Int, tolerance::Float64) :: SparseVector{Float64, Int}
+        max_iter::Int, tolerance::Float64;
+        products_init::Union{Nothing, AbstractVector}=nothing) :: SparseVector{Float64, Int}
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
 
     xdict = DefaultDict{Int, Float64}(0.)
-    products = dictionary' * residual
+    products = (isnothing(products_init) ? dictionary' * residual : products_init)
     products_abs = similar(products)  # prealloc
 
     for i in 1:max_iter
@@ -46,11 +47,12 @@ end
         # @inbounds products .= dictionary' * residual
         # maxval, maxidx = findmax(products)
         # minval, minidx = findmin(products)
-        # @inbounds products_abs .= abs.(products)
-        @inbounds products_abs .= (-1 .^ signbit.(products)) .* products  # basically abs. without alloc
+        products_abs .= abs.(products)
+        # products_abs .= products  # basically) abs. without alloc
+        # products_abs .*= (-1 .^ signbit.(products))
         _, maxindex = findmax(products_abs)
         maxval = products[maxindex]
-        atom = dictionary[:, maxindex]
+        @inbounds atom = @view dictionary[:, maxindex]
 
         # # val, idx = (abs(maxval) > abs(minval) ? (maxval, maxidx) : (minval, minidx))
         # # maxval = products[maxindex]
@@ -135,6 +137,7 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     end
 
     DtD = dictionary'*dictionary
+    products = dictionary' * data
 
     X_::Vector{SparseVector{Float64, Int}} = collect_fn(
         matching_pursuit_(
@@ -142,9 +145,10 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
                 dictionary,
                 DtD,
                 method.max_iter,
-                method.tolerance
+                method.tolerance,
+                products_init=productcol
             )
-        for datacol in eachcol(data)
+        for (datacol, productcol) in zip(eachcol(data), eachcol(products))
     )
     # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
     # I first tried `hcat(X_...)`, but it was somewhat slow.
