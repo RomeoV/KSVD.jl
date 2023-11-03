@@ -45,6 +45,8 @@ end
     products = (isnothing(products_init) ? dictionary' * residual : products_init)
     products_abs = similar(products)  # prealloc
 
+    # pre-sorting doesn't provide much speedup and is algorithmically questionable...
+    # sorted_ind = sortperm(products_abs, order=Base.Order.Reverse)
     for i in 1:max_iter
         if norm(residual) < tolerance
             return sparsevec(xdict, n_atoms)
@@ -58,6 +60,7 @@ end
         # products_abs .= products  # basically) abs. without alloc
         # products_abs .*= (-1 .^ signbit.(products))
         _, maxindex = findmax(products_abs)
+        # maxindex = sorted_ind[i]
         maxval = products[maxindex]
         @inbounds atom = @view dictionary[:, maxindex]
 
