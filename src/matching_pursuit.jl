@@ -47,7 +47,11 @@ end
 
     xdict = DefaultDict{Int, Float64}(0.)
     products = (isnothing(products_init) ? dictionary' * residual : products_init)
-    products_abs = similar(products)  # prealloc
+    products_abs = abs.(products)  # prealloc
+    # products_abs_heap = MutableBinaryHeap(Base.By(last, DataStructures.FasterReverse()),
+    #                                       collect(enumerate(products_abs)))
+    # products_abs_heap = BinaryHeap(Base.By(last, DataStructures.FasterReverse()),
+    #                                collect(enumerate(products_abs)))
 
     # pre-sorting doesn't provide much speedup and is algorithmically questionable...
     # sorted_ind = sortperm(products_abs, order=Base.Order.Reverse)
@@ -64,7 +68,10 @@ end
         # products_abs .= products  # basically) abs. without alloc
         # products_abs .*= (-1 .^ signbit.(products))
 
+        products_abs .= abs.(products)
+
         _, maxindex = findmax(products_abs)
+        # maxindex, _ = pop!(products_abs_heap)
         # maxindex = sorted_ind[i]
 
         maxval = products[maxindex]
