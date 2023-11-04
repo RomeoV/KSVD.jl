@@ -37,6 +37,16 @@ end
     tolerance = default_tolerance
 end
 
+""" Redefine findmax for vector of floats to not do nan-checks.
+
+By default,`findmax` uses `isless`, which does a nan-check before computing `<(lhs, rhs)`.
+We roll basically the same logic as in `Julia/Base/reduce.jl:findmax` but we directly use `<`, which gives us about a 1.5x speedup.
+"""
+function findmax(data::Vector{Float64})
+    cmp_tpl((fm, im), (fx, ix)) = (fm < fx) ? (fx, ix) : (fm, im)
+    mapfoldl( ((k, v),) -> (v, k), cmp_tpl, pairs(data))
+end
+
 @inbounds function matching_pursuit_(
         data::AbstractVector, dictionary::AbstractMatrix, DtD::AbstractMatrix,
         max_iter::Int, tolerance::Float64;
