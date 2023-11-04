@@ -16,8 +16,6 @@ using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
 using Tullio
-using Retry
-using FLoops
 
 
 include("matching_pursuit.jl")

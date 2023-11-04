@@ -2,14 +2,10 @@ using DataStructures
 
 # The implementation is referencing the wikipedia page
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
-using CUDA
-using LoopVectorization
 using LinearAlgebra
 using Transducers
 using Match
 import SparseArrays: nonzeroinds
-using FLoops, FoldsThreads, BangBang, MicroCollections
-using ThreadPools
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -74,7 +70,6 @@ end
         # @inbounds products .= dictionary' * residual
         # maxval, maxidx = findmax(products)
         # minval, minidx = findmin(products)
-        products_abs .= abs.(products)
         # products_abs .= products  # basically) abs. without alloc
         # products_abs .*= (-1 .^ signbit.(products))
 
@@ -230,8 +225,8 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
 
     I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
     # @floop for (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
-    ThreadPools.@bthreads for j in axes(data, 2)
-    # Threads.@threads for j in axes(data, 2)
+    # ThreadPools.@bthreads for j in axes(data, 2)
+    Threads.@threads for j in axes(data, 2)
         # (j, (datacol, productcol)) in enumerate(zip(eachcol(data), eachcol(products)))
         datacol = @view data[:, j]; productcol = @view products[:, j]
         data_vec = matching_pursuit_(
