@@ -185,15 +185,15 @@ function sparse_coding(method::FullBatchMatchingPursuit, data::AbstractMatrix, d
     products = dictionary' * data
     products_abs = abs.(products)
 
-    # I = Int[]; J = Int[]; V = Float64[];
     I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
 
-    max_product_inds = sortperm.(eachcol(products_abs), rev=true)
-    @floop for data_idx in axes(data, 2)
-    # for data_idx in axes(data, 2)
-        inds = max_product_inds[data_idx][1:max_iter]
+    # max_product_inds = sortperm.(eachcol(products_abs), rev=true, lt=(<))
+    Threads.@threads for data_idx in axes(data, 2)
+        hp = BinaryHeap(Base.By(last, DataStructures.FasterReverse()),
+                        collect(pairs(@view products_abs[:, data_idx])))
+        inds, ps = [Tuple(pop!(hp)) for _ in 1:max_iter] |> destruct
 
-        coeffs = products[inds, data_idx] ./ sum(abs2, dictionary[:, inds], dims=1)[:]
+        coeffs = ps ./ sum(abs2, dictionary[:, inds], dims=1)[1, :]
         residuals = data[:, data_idx] .- cumsum(coeffs' .* dictionary[:, inds], dims=2)
         residual_norms = norm.(eachcol(residuals)).^2
         last_idx::Int = let
