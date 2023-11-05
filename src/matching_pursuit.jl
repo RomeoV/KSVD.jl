@@ -104,8 +104,6 @@ Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dict
 ```
 """
 function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, data::AbstractMatrix, dictionary::AbstractMatrix)
-                          # max_iter::Int = default_max_iter_mp,
-                          # tolerance::Float64 = default_tolerance)
     K = size(dictionary, 2)
     N = size(data, 2)
 
