@@ -6,6 +6,7 @@ using Transducers
 using Match
 import SparseArrays: nonzeroinds
 using Destruct
+import Profile
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -150,6 +151,10 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
 
     DtD = dictionary'*dictionary
     products = dictionary' * data
+
+    # reset the profiler here to only profile the threaded section
+    # otherwise we get a pretty large area of "poptask" even though all cores (but not all threads(!)) are busy with the dense matmul
+    # Profile.clear()
 
     I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
     Threads.@threads for j in axes(data, 2)
