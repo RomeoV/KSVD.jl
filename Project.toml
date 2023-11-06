@@ -19,3 +19,10 @@ ThreadPools = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Transducers = "28d57a85-8fef-5791-bfe6-a80928e7c999"
 Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
+
+[extras]
+ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "ReTest"]

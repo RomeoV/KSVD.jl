@@ -1,5 +1,6 @@
 using KSVD
-using Test, LinearAlgebra
+using LinearAlgebra
+using Test
 
 include("ksvd.jl")
 include("matching_pursuit.jl")
