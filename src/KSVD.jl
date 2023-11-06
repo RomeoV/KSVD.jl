@@ -16,6 +16,8 @@ using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
 using Tullio
+using TimerOutputs
+# using MKLSparse
 
 
 include("matching_pursuit.jl")
@@ -229,6 +231,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
               ) where T
               # max_iter_mp::Int = default_max_iter_mp)
 
+    to = TimerOutput()
     K = n_atoms
     n, N = size(Y)
 
@@ -240,22 +243,24 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
     max_n_zeros = ceil(Int, sparsity_allowance * length(X))
 
     # D is a dictionary matrix that contains atoms for columns.
-    D = init_dictionary(n, K)  # size(D) == (n, K)
+    @timeit to "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
 
     p = Progress(max_iter)
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
-        X_sparse = sparse_coding(sparse_coding_method, Y, D)
+        @timeit to "Sparse coding" X_sparse = sparse_coding(sparse_coding_method, Y, D)
         verbose && @info "Starting svd"
-        D, X = ksvd(ksvd_method, Y, D, X_sparse)
+        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse)
 
         # return if the number of zero entries are <= max_n_zeros
         if sum(iszero, X) > max_n_zeros
+            show(to)
             return D, X
         end
         next!(p)
     end
+    show(to)
     return D, X
 end
 
