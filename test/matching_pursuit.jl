@@ -1,32 +1,36 @@
 import Random: seed!, TaskLocalRNG
 
 
-@testset "Compare Matching Pursuit implementations" begin
-    rng = TaskLocalRNG();
-    seed!(rng, 1)
+@testset "Compare to Legacy Implementation." begin
+    @testset for T in [Float64, Float32]
+        rng = TaskLocalRNG();
+        seed!(rng, 1)
 
-    T = Float64
-    D, N = 100, 1000
-    data = rand(rng, D, N)
-    B = KSVD.init_dictionary(T, D, 2*D)
+        D, N = 100, 1000
+        data = rand(rng, T, D, N)
+        B = KSVD.init_dictionary(T, D, 2*D)
 
-    res_baseline = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(), data, B)
+        res_baseline = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(), data, B)
+        @test eltype(res_baseline) == T
 
-    if Threads.nthreads == 1
-        @warn "Parallel implementation will only be tested properly if test is launched with multiple threads!"
-    end
-    @testset for method in [KSVD.MatchingPursuit(),
-                            KSVD.ParallelMatchingPursuit(),
-                            KSVD.FasterParallelMatchingPursuit(),
-                            KSVD.CUDAAcceleratedMatchingPursuit(batch_size=300) # batch_size<N and batch_size÷N != 0 for test
-                            ]
+        if Threads.nthreads == 1
+            @warn "Parallel implementation will only be tested properly if test is launched with multiple threads!"
+        end
+        @testset for method in [KSVD.MatchingPursuit(),
+                                KSVD.ParallelMatchingPursuit(),
+                                KSVD.FasterParallelMatchingPursuit(),
+                                KSVD.CUDAAcceleratedMatchingPursuit(batch_size=300) # batch_size<N and batch_size÷N != 0 for test
+                                ]
 
-        res = KSVD.sparse_coding(method, data, B)
-        @test res ≈ res_baseline
-    end
-    @testset for method in [KSVD.FullBatchMatchingPursuit,]
-        res = KSVD.sparse_coding(method(), data, B)
-        @test res ≈ res_baseline broken=true
+            res = KSVD.sparse_coding(method, data, B)
+            @test res ≈ res_baseline
+            @test eltype(res) == T
+        end
+        @testset for method in [KSVD.FullBatchMatchingPursuit,]
+            res = KSVD.sparse_coding(method(), data, B)
+            @test res ≈ res_baseline broken=true
+            @test eltype(res) == T
+        end
     end
 end
 
