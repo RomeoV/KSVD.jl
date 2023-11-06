@@ -1,34 +1,9 @@
-module KSVD
-
-# This is an implementation of the K-SVD algorithm.
-# The original paper:
-# K-SVD: An Algorithm for Designing Overcomplete Dictionaries
-# for Sparse Representation
-# http://www.cs.technion.ac.il/~freddy/papers/120.pdf
-
-# Variable names are based on the original paper.
-# If you try to read the code, I recommend you to see Figure 2 first.
-#
-
-export ksvd, matching_pursuit
-
-using ProgressMeter
-using Base.Threads, Random, SparseArrays, LinearAlgebra
-using TSVD
-using Tullio
-using TimerOutputs
-# using MKLSparse
-
-
-include("util.jl")
-include("matching_pursuit.jl")
-include("ksvd.jl")
-
 """
     dictionary_learning(
          Y::AbstractMatrix, n_atoms::Int;
-         sparsity_allowance::Float64 = 0.1,
-         max_iter::Int = 10)
+         sparsity_allowance::Float64 = $default_sparsity_allowance,
+         max_iter::Int = $default_max_iter,
+         max_iter_mp::Int = $default_max_iter_mp)
 
 Run K-SVD that designs an efficient dictionary D for sparse representations,
 and returns X such that DX = Y or DX ≈ Y.
@@ -43,10 +18,10 @@ and returns X such that DX = Y or DX ≈ Y.
 ```
 """
 function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
-                             sparsity_allowance = 0.1,
+                             sparsity_allowance = default_sparsity_allowance,
                              ksvd_method = OptimizedKSVD(),
                              sparse_coding_method = MatchingPursuit(),
-                             max_iter::Int = 10,
+                             max_iter::Int = default_max_iter,
                              verbose=false
                              ) where T
     to = TimerOutput()
@@ -81,5 +56,3 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     show(to)
     return D, X
 end
-
-end # module

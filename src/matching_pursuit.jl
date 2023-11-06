@@ -13,10 +13,7 @@ using FLoops
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
 
-
-function SparseArrays.sparsevec(d::DefaultDict{Int, Float64}, m::Int)
-    SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
-end
+sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
 
 abstract type SparseCodingMethod end
 function validate_mp_args(max_iter, tolerance, other_args...)
@@ -216,7 +213,9 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
 
     I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [T[] for _ in 1:size(data, 2)];
 
-    for ((j_batch, _), products_batch) in zip(data_iter, ch_gpu_to_cpu)
+    @debug "Getting ready for processing"
+    for (j_batch, products_batch) in zip(data_iter, ch_gpu_to_cpu)
+        @debug "Processing $j_batch"
         @floop for (j_, j) in zip(j_batch, axes(products_batch, 2))
             datacol = @view data[:, j]; productcol = @view products_batch[:, j]
             data_vec = matching_pursuit_(
@@ -236,8 +235,6 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
     X = sparse(I,J,V, K, N)
     return X
 end
-
-sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
 
 "This turns out to be slow /and/ algorithmically wrong. Don't use..."
 function sparse_coding(method::FullBatchMatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
