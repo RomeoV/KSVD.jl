@@ -49,12 +49,14 @@ function error_matrix4(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, 
 end
 
 
-function init_dictionary(n::Int, K::Int)
+init_dictionary(n::Int, K::Int) = init_dictionary(Float64, n, K)
+function init_dictionary(T::Type, n::Int, K::Int)
     # D must be a full-rank matrix
     D = rand(n, K)
-    while rank(D) != min(n, K)
-        D = rand(n, K)
+    while rank(D, rtol=sqrt(min(n,K)*eps())) != min(n, K)
+        D = rand(T, n, K)
     end
+    D = convert(Matrix{T}, D)
 
     @inbounds for k in 1:K
         D[:, k] ./= norm(@view(D[:, k]))
@@ -94,7 +96,7 @@ function ksvd(method::BasicKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abstra
     return D, X
 end
 
-function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; err_buffers=nothing, err_gamma_buffers=nothing) where T
     N = size(Y, 2)
     Eₖ = Y - D * X
     X_cpy = copy(X)
@@ -115,7 +117,7 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abs
         # wₖ is the column indices where the k-th row of xₖ is non-zero,
         # which is equivalent to [i for i in N if xₖ[i] != 0]
         ωₖ = findall(!iszero, xₖ)
-        Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(length(ωₖ)), N, length(ωₖ))
+        Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(T, length(ωₖ)), N, length(ωₖ))
 
         # Eₖ * Ωₖ implies a selection of error columns that
         # correspond to examples that use the atom D[:, k]
@@ -221,13 +223,13 @@ and returns X such that DX = Y or DX ≈ Y.
     every iteration.
 ```
 """
-function ksvd(Y::AbstractMatrix, n_atoms::Int;
+function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
               sparsity_allowance = default_sparsity_allowance,
               ksvd_method = OptimizedKSVD(),
               sparse_coding_method = MatchingPursuit(),
               max_iter::Int = default_max_iter,
               verbose=false
-              )
+              ) where T
               # max_iter_mp::Int = default_max_iter_mp)
 
     K = n_atoms
@@ -237,7 +239,7 @@ function ksvd(Y::AbstractMatrix, n_atoms::Int;
         throw(ArgumentError("`sparsity_allowance` must be in range [0,1]"))
     end
 
-    X = spzeros(K, N)  # just for making X global in this function
+    X = spzeros(T, K, N)  # just for making X global in this function
     max_n_zeros = ceil(Int, sparsity_allowance * length(X))
 
     # D is a dictionary matrix that contains atoms for columns.

@@ -52,13 +52,13 @@ end
 By default,`findmax` uses `isless`, which does a nan-check before computing `<(lhs, rhs)`.
 We roll basically the same logic as in `Julia/Base/reduce.jl:findmax` but we directly use `<`, which gives us about a 1.5x speedup.
 """
-function findmax_fast(data::Vector{Float64})
+function findmax_fast(data::Vector{T}) where T
     cmp_tpl((fm, im), (fx, ix)) = (fm < fx) ? (fx, ix) : (fm, im)
     mapfoldl( ((k, v),) -> (v, k), cmp_tpl, pairs(data))
 end
 
 @inbounds function matching_pursuit_(
-        method::Union{MatchingPursuit, ParallelMatchingPursuit, FasterParallelMatchingPursuit},
+        method::Union{MatchingPursuit, ParallelMatchingPursuit, FasterParallelMatchingPursuit, CUDAAcceleratedMatchingPursuit},
         data::AbstractVector, dictionary::AbstractMatrix, DtD::AbstractMatrix;
         products_init::Union{Nothing, AbstractVector}=nothing) :: SparseVector{Float64, Int}
     (; tolerance, max_iter) = method
@@ -145,7 +145,7 @@ end
 
 "Similar to `ParallelMatchingPursuit`, but we deal with the collection of indices slightly differently.
 Doesn't seem to make a great difference..."
-function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
+function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
     K = size(dictionary, 2)
     N = size(data, 2)
 
@@ -156,7 +156,7 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
     # otherwise we get a pretty large area of "poptask" even though all cores (but not all threads(!)) are busy with the dense matmul
     # Profile.clear()
 
-    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
+    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [T[] for _ in 1:size(data, 2)];
     Threads.@threads for j in axes(data, 2)
         datacol = @view data[:, j]; productcol = @view products[:, j]
         data_vec = matching_pursuit_(
