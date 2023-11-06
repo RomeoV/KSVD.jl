@@ -100,7 +100,9 @@ end
 
 function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; err_buffers=nothing, err_gamma_buffers=nothing) where T
     N = size(Y, 2)
-    Eₖ = Y - D * X
+    # Eₖ = Y .- D * X
+    D_t = Matrix(transpose(D));
+    Eₖ = transpose(.-X'*D_t .+ Y')
     X_cpy = copy(X)
     D_cpy = copy(D)
 
