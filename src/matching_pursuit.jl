@@ -52,7 +52,6 @@ end
     CUDAAcceleratedMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
-
 @inbounds function matching_pursuit_(
         method::Union{MatchingPursuit, ParallelMatchingPursuit, FasterParallelMatchingPursuit, CUDAAcceleratedMatchingPursuit},
         data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
@@ -186,19 +185,15 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
     # can get started as soon as the first batch is done computing.
     ch_cpu_to_gpu = Channel{CuMatrix{T}}(; spawn=true) do ch
         foreach(data_iter) do idx
-            put!(ch, CuMatrix(data[:, idx]))
-        end
-    end
-    ch_gpu_op = Channel{CuMatrix{T}}(; spawn=true) do ch
-        foreach(ch_cpu_to_gpu) do data_batch
-            products_batch = Dt_gpu * data_batch
-            put!(ch, products_batch)
+            data_batch = CuMatrix(@view data[:, idx])
+            put!(ch, data_batch)
         end
     end
     ch_gpu_to_cpu = Channel{Matrix{T}}(; spawn=true) do ch
-      foreach(ch_gpu_op) do products_batch
-          put!(ch, Matrix(products_batch))
-      end
+        foreach(ch_cpu_to_gpu) do data_batch
+            products_batch = Dt_gpu * data_batch
+            put!(ch, Matrix(products_batch))
+        end
     end
 
 
