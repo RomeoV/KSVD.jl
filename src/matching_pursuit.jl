@@ -55,13 +55,13 @@ end
 
 @inbounds function matching_pursuit_(
         method::Union{MatchingPursuit, ParallelMatchingPursuit, FasterParallelMatchingPursuit, CUDAAcceleratedMatchingPursuit},
-        data::AbstractVector, dictionary::AbstractMatrix, DtD::AbstractMatrix;
-        products_init::Union{Nothing, AbstractVector}=nothing) :: SparseVector{Float64, Int}
+        data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
+        products_init::Union{Nothing, AbstractVector}=nothing) :: SparseVector{T, Int} where T
     (; tolerance, max_iter) = method
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
-    xdict = DefaultDict{Int, Float64}(0.)
+    xdict = DefaultDict{Int, T}(0.)
 
     products = (isnothing(products_init) ? dictionary' * residual : products_init)
     products_abs = abs.(products)  # prealloc
@@ -100,7 +100,7 @@ Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dict
 * `tolerance`: Exit when the norm of the residual < tolerance
 ```
 """
-function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, data::AbstractMatrix, dictionary::AbstractMatrix)
+function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
     K = size(dictionary, 2)
     N = size(data, 2)
 
@@ -112,7 +112,7 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     DtD = dictionary'*dictionary
     products = dictionary' * data
 
-    X_::Vector{SparseVector{Float64, Int}} = collect_fn(
+    X_::Vector{SparseVector{T, Int}} = collect_fn(
         matching_pursuit_(
                 method,
                 datacol,
@@ -128,7 +128,7 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     # was also bad somehow.
     # This version seems to overcome the type inference issues and makes the code much faster.
     X = let
-        I = Int[]; J = Int[]; V = Float64[]
+        I = Int[]; J = Int[]; V = T[]
         for (i, v) in enumerate(X_)
             append!(I, v.nzind)
             append!(J, fill(i, nnz(v)))
@@ -228,7 +228,7 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
 end
 
 "This turns out to be slow /and/ algorithmically wrong. Don't use..."
-function sparse_coding(method::FullBatchMatchingPursuit, data::AbstractMatrix, dictionary::AbstractMatrix)
+function sparse_coding(method::FullBatchMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
     K = size(dictionary, 2)
     N = size(data, 2)
     max_iter = method.max_iter
@@ -237,7 +237,7 @@ function sparse_coding(method::FullBatchMatchingPursuit, data::AbstractMatrix, d
     products = dictionary' * data
     products_abs = abs.(products)
 
-    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [Float64[] for _ in 1:size(data, 2)];
+    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [T[] for _ in 1:size(data, 2)];
 
     # max_product_inds = sortperm.(eachcol(products_abs), rev=true, lt=(<))
     Threads.@threads for data_idx in axes(data, 2)
@@ -267,12 +267,12 @@ end
 " This is the original implementation by https://github.com/IshitaTakeshi, useful for
 numerical comparison and didactic purposes. "
 function sparse_coding(method::LegacyMatchingPursuit,
-                          data::AbstractMatrix,
-                          dictionary::AbstractMatrix)
+                          data::AbstractMatrix{T},
+                          dictionary::AbstractMatrix{T}) where T
     K = size(dictionary, 2)
     N = size(data, 2)
 
-    X = spzeros(K, N)
+    X = spzeros(T, K, N)
 
     for i in 1:N
         X[:, i] = matching_pursuit_(
@@ -284,14 +284,14 @@ function sparse_coding(method::LegacyMatchingPursuit,
     return X
 end
 function matching_pursuit_(method::LegacyMatchingPursuit,
-                           data::AbstractVector,
-                           dictionary::AbstractMatrix)
+                           data::AbstractVector{T},
+                           dictionary::AbstractMatrix{T}) where T
     (; max_iter, tolerance) = method
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
 
-    xdict = DefaultDict{Int, Float64}(0.)
+    xdict = DefaultDict{Int, T}(0.)
     for i in 1:max_iter
         if norm(residual) < tolerance
             return sparsevec(xdict, n_atoms)

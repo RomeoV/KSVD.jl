@@ -1,7 +1,7 @@
 import DataStructures: DefaultDict
 import SparseArrays: sparsevec
 
-function SparseArrays.sparsevec(d::DefaultDict{Int, Float64}, m::Int)
+function SparseArrays.sparsevec(d::DefaultDict{Int, T}, m::Int) where T
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
 
