@@ -127,12 +127,8 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
 
         # Eₖ * Ωₖ implies a selection of error columns that
         # correspond to examples that use the atom D[:, k]
-        # Eₖ = error_matrix(Y, D, X, k)
-        # @tullio Eₖ_local[i, j] += D[i,$k] * X[$k,j]   # first hotspot
-        # Eₖ_local .+= D[:, k:k] * X[k:k, :]
-        # Eₖ_local = copy(Eₖ)
-        Eₖ_local = Eₖ_buffers[Threads.threadid()]
-        # Eₖ_local .= Eₖ
+        Eₖ_local = (method.prealloc_buffers ? Eₖ_buffers[Threads.threadid()] : copy(Eₖ))
+        # Eₖ .+= D[:, k:k] * X[k:k, :]
         for (j, X_val) in zip(findnz(X[k, :])...)
             # @inbounds @views axpy!(X_val, D[:, k], Eₖ_local[:, j])
             @inbounds @views Eₖ_local[:, j] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
