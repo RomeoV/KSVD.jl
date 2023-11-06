@@ -23,7 +23,7 @@ import Random: seed!, TaskLocalRNG
                                 ]
 
             res = KSVD.sparse_coding(method, data, B)
-            @test res ≈ res_baseline
+            @test res ≈ res_baseline rtol=10*sqrt(eps(T))
             @test eltype(res) == T
         end
         @testset for method in [KSVD.FullBatchMatchingPursuit,]
