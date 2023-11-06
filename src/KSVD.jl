@@ -68,7 +68,9 @@ end
 abstract type KSVDMethod end
 struct BasicKSVD <: KSVDMethod end
 struct OptimizedKSVD <: KSVDMethod end
-struct ParallelKSVD <: KSVDMethod end
+@kwdef struct ParallelKSVD <: KSVDMethod 
+    prealloc_buffers::Bool=true
+end
 
 function ksvd(method::BasicKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
@@ -103,8 +105,12 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
     D_cpy = copy(D)
 
     # preallocate error buffers
-    Eₖ_buffers = [copy(Eₖ) for _ in 1:Threads.maxthreadid()]
-    # E_Ω_buffers = [copy(Eₖ) for _ in 1:Threads.nthreads()]
+    Eₖ_buffers = (!isnothing(err_buffers) ? copyto!.(err_buffers, [Eₖ]) :
+                  (method.prealloc_buffers ? [copy(Eₖ) for _ in 1:Threads.nthreads()] : 
+                   nothing))
+    E_Ω_buffers = (!isnothing(err_buffers) ? err_gamma_buffers :
+                  (method.prealloc_buffers ? [similar(Eₖ) for _ in 1:Threads.nthreads()] : 
+                   nothing))
 
     lck = Threads.SpinLock()
     # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
@@ -136,30 +142,26 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        # U, S, V = tsvd(Eₖ * Ωₖ, initvec=randn!(similar(Eₖ, size(Eₖ,1))))
-        # E_Ω = let buffer = E_Ω_buffers[Threads.threadid()]
-        #     @view buffer[:, 1:length(ωₖ)]
-        # end
-        E_Ω = Eₖ_local * Ωₖ
-        U, S, V = if size(E_Ω, 2) < 5
+        # E_Ω = Eₖ_local * Ωₖ
+        E_Ω = let
+            buf = E_Ω_buffers[Threads.threadid()]
+            @inbounds @view buf[:, 1:length(ωₖ)]
+        end
+        for (i, j, Ω_val) in zip(findnz(Ωₖ)...)
+            @inbounds @views E_Ω[:, j] .=  Ω_val .* Eₖ_local[:, i]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
+        end
+        U, S, V = if size(E_Ω, 2) <= 5
             svd(E_Ω)
         else
             tsvd(E_Ω)                 # second hotspot
         end
-        # lock(lck) do  # I actually think we don't need this lock...
         @inbounds @views D_cpy[:, k] .= U[:, 1]
         @inbounds @views X_cpy[k, ωₖ] .= S[1] .* V[:, 1]
-        # for (src_idx, target_idx) in enumerate(ωₖ)
-        #     @inbounds X_cpy[k, target_idx] = V[src_idx, 1] * S[1]
-        # end
-        # end
-        # Eₖ -= D[:, k:k] * X[k:k, :]
         # reverse the local error matrix to be reused without copy
+        # Eₖ .-= D[:, k:k] * X[k:k, :]
         for (j, X_val) in zip(findnz(X[k, :])...)
-            # @inbounds @views axpy!(X_val, D[:, k], Eₖ_local[:, j])
             @inbounds @views Eₖ_local[:, j] .-=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
         end
-        # @tullio Eₖ[i, j] += -D[i,$k] * X[$k,j]  # third hotspot
     end
     return D_cpy, X_cpy
 end
