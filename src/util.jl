@@ -20,6 +20,16 @@ function init_dictionary(T::Type, n::Int, K::Int)
     return D
 end
 
+""" Redefine findmax for vector of floats to not do nan-checks.
+
+By default,`findmax` uses `isless`, which does a nan-check before computing `<(lhs, rhs)`.
+We roll basically the same logic as in `Julia/Base/reduce.jl:findmax` but we directly use `<`, which gives us about a 1.5x speedup.
+"""
+function findmax_fast(data::Vector{T}) where T
+    cmp_tpl((fm, im), (fx, ix)) = (fm < fx) ? (fx, ix) : (fm, im)
+    mapfoldl( ((k, v),) -> (v, k), cmp_tpl, pairs(data))
+end
+
 function error_matrix(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
     # indices = [i for i in 1:size(D, 2) if i != k]
     indices = deleteat!(collect(1:size(D, 2)), k)
