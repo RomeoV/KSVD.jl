@@ -7,6 +7,8 @@ using Match
 import SparseArrays: nonzeroinds
 using Destruct
 import Profile
+using CUDA
+using FLoops
 
 const default_max_iter_mp = 20
 const default_tolerance = 1e-6
@@ -17,7 +19,7 @@ function SparseArrays.sparsevec(d::DefaultDict{Int, Float64}, m::Int)
 end
 
 abstract type SparseCodingMethod end
-function validate_mp_args(max_iter, tolerance)
+function validate_mp_args(max_iter, tolerance, other_args...)
     max_iter >= 1 || throw(ArgumentError("`max_iter` must be > 0"))
     tolerance > 0. || throw(ArgumentError("`tolerance` must be > 0"))
 end
@@ -45,6 +47,12 @@ end
     max_iter::Int = default_max_iter_mp
     tolerance = default_tolerance
     FullBatchMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
+end
+@kwdef struct CUDAAcceleratedMatchingPursuit <: SparseCodingMethod
+    max_iter::Int = default_max_iter_mp
+    tolerance = default_tolerance
+    batch_size::Int = 1_000
+    CUDAAcceleratedMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
 """ Redefine findmax for vector of floats to not do nan-checks.
@@ -168,6 +176,56 @@ function sparse_coding(method::FasterParallelMatchingPursuit, data::AbstractMatr
                     )
         append!(I_buffers[j], nonzeroinds(data_vec))
         append!(V_buffers[j], nonzeros(data_vec))
+    end
+
+    I = vcat(I_buffers...); V = vcat(V_buffers...)
+    J = vcat([fill(j, size(I_buf)) for (j, I_buf) in enumerate(I_buffers)]...)
+    X = sparse(I,J,V, K, N)
+    return X
+end
+
+function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
+    K = size(dictionary, 2)
+    N = size(data, 2)
+
+    DtD = dictionary'*dictionary
+    Dt_gpu = CuMatrix(dictionary')
+
+    # data_iter = chunks(eachcol(data), 10)
+    data_iter = Iterators.partition(axes(data, 2), method.batch_size)
+    ch_cpu_to_gpu = Channel{CuMatrix{T}}(; spawn=true) do ch
+        foreach(data_iter) do idx
+            put!(ch, CuMatrix(data[:, idx]))
+        end
+    end
+    ch_gpu_op = Channel{CuMatrix{T}}(; spawn=true) do ch
+        foreach(ch_cpu_to_gpu) do data_batch
+            products_batch = Dt_gpu * data_batch
+            put!(ch, products_batch)
+        end
+    end
+    ch_gpu_to_cpu = Channel{Matrix{T}}(; spawn=true) do ch
+      foreach(ch_gpu_op) do products_batch
+          put!(ch, Matrix(products_batch))
+      end
+    end
+
+
+    I_buffers = [Int[] for _ in 1:size(data, 2)]; V_buffers = [T[] for _ in 1:size(data, 2)];
+
+    for ((j_batch, _), products_batch) in zip(data_iter, ch_gpu_to_cpu)
+        @floop for (j_, j) in zip(j_batch, axes(products_batch, 2))
+            datacol = @view data[:, j]; productcol = @view products_batch[:, j]
+            data_vec = matching_pursuit_(
+                            method,
+                            datacol,
+                            dictionary,
+                            DtD;
+                            products_init=productcol
+                        )
+            append!(I_buffers[j_], nonzeroinds(data_vec))
+            append!(V_buffers[j_], nonzeros(data_vec))
+        end
     end
 
     I = vcat(I_buffers...); V = vcat(V_buffers...)
