@@ -112,10 +112,8 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
                   (method.prealloc_buffers ? [similar(Eₖ) for _ in 1:Threads.nthreads()] : 
                    nothing))
 
-    lck = Threads.SpinLock()
     # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
     Threads.@threads :static for k in axes(X,1)
-    # @floop for k in 1:size(X, 1)
         xₖ = X[k, :]
         # ignore if the k-th row is zeros
         all(iszero, xₖ) && continue
@@ -130,7 +128,6 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
         Eₖ_local = (method.prealloc_buffers ? Eₖ_buffers[Threads.threadid()] : copy(Eₖ))
         # Eₖ .+= D[:, k:k] * X[k:k, :]
         for (j, X_val) in zip(findnz(X[k, :])...)
-            # @inbounds @views axpy!(X_val, D[:, k], Eₖ_local[:, j])
             @inbounds @views Eₖ_local[:, j] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
         end
 

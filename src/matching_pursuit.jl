@@ -193,6 +193,9 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
 
     # data_iter = chunks(eachcol(data), 10)
     data_iter = Iterators.partition(axes(data, 2), method.batch_size)
+    # Move first batch of data to gpu (asynchronously), compute matrix matrix product there,
+    # then move back to cpu. This should be pipelined, and the next part of the computation (sparse matmul)
+    # can get started as soon as the first batch is done computing.
     ch_cpu_to_gpu = Channel{CuMatrix{T}}(; spawn=true) do ch
         foreach(data_iter) do idx
             put!(ch, CuMatrix(data[:, idx]))
