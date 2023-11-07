@@ -65,7 +65,7 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
 
         # Eₖ * Ωₖ implies a selection of error columns that
         # correspond to examples that use the atom D[:, k]
-        Eₖ_local = (method.prealloc_buffers ? Eₖ_buffers[Threads.threadid()] : copy(Eₖ))
+        Eₖ_local = (!isnothing(Eₖ_buffers) ? Eₖ_buffers[Threads.threadid()] : copy(Eₖ))
         # Eₖ .+= D[:, k:k] * X[k:k, :]
         for (j, X_val) in zip(findnz(X[k, :])...)
             @inbounds @views Eₖ_local[:, j] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
@@ -76,10 +76,10 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
         # E_Ω = Eₖ_local * Ωₖ
-        E_Ω = let
-            buf = E_Ω_buffers[Threads.threadid()]
-            @inbounds @view buf[:, 1:length(ωₖ)]
-        end
+        E_Ω = (!isnothing(E_Ω_buffers) ? let
+                    buf = E_Ω_buffers[Threads.threadid()]
+                    @inbounds @view buf[:, 1:length(ωₖ)]
+               end : similar(Eₖ, size(Eₖ, 1), length(ωₖ)))
         for (i, j, Ω_val) in zip(findnz(Ωₖ)...)
             @inbounds @views E_Ω[:, j] .=  Ω_val .* Eₖ_local[:, i]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
         end
