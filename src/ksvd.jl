@@ -1,13 +1,16 @@
+import Random: shuffle
 ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKSVD(), Y,D,X)
 
 abstract type KSVDMethod end
-struct BasicKSVD <: KSVDMethod end
-struct OptimizedKSVD <: KSVDMethod end
+struct LegacyKSVD <: KSVDMethod end
+@kwdef struct OptimizedKSVD <: KSVDMethod 
+    shuffle_indices::Bool = true
+end
 @kwdef struct ParallelKSVD <: KSVDMethod
     prealloc_buffers::Bool=true
 end
 
-function ksvd(method::BasicKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+function ksvd(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     for k in 1:size(X, 1)
         xₖ = X[k, :]
@@ -99,7 +102,8 @@ end
 function ksvd(method::OptimizedKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     Eₖ = Y - D * X
-    @showprogress for k in 1:size(X, 1)
+    basis_indices = (method.shuffle_indices ? shuffle(axes(X, 1)) : axes(X, 1))
+    @showprogress for k in basis_indices
         xₖ = X[k, :]
         # ignore if the k-th row is zeros
         all(iszero, xₖ) && continue
