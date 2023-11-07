@@ -103,7 +103,7 @@ function ksvd(method::OptimizedKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Ab
     N = size(Y, 2)
     Eₖ = Y - D * X
     basis_indices = (method.shuffle_indices ? shuffle(axes(X, 1)) : axes(X, 1))
-    @showprogress for k in basis_indices
+    for k in basis_indices
         xₖ = X[k, :]
         # ignore if the k-th row is zeros
         all(iszero, xₖ) && continue
