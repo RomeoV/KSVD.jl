@@ -17,7 +17,7 @@ import StatsBase: sample
             N = 100  # num samples
             # nnz = 10  # num nonzeros
             K = 1200  # dictionary dimension >= sample_dimension
-            basis = KSVD.init_dictionary(T, D, K)
+            basis = KSVD.init_dictionary(rng, T, D, K)
             Is = vcat([sample(rng, 1:K, nnz, replace=false) for _ in 1:N]...);
             Js = vcat([fill(j, nnz) for j in 1:N]...)
             Vs = rand!(rng, similar(Js, T)) .+ 1
@@ -48,7 +48,7 @@ end
 
         D, N = 100, 1000
         data = rand(rng, T, D, N)
-        B = KSVD.init_dictionary(T, D, 2*D)
+        B = KSVD.init_dictionary(rng, T, D, 2*D)
 
         res_baseline = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(), data, B)
         @test eltype(res_baseline) == T
@@ -63,7 +63,7 @@ end
                                 ]
 
             res = KSVD.sparse_coding(method, data, B)
-            @test res ≈ res_baseline rtol=10*sqrt(eps(T))
+            @test res ≈ res_baseline rtol=sqrt(eps(T))
             @test eltype(res) == T
         end
         @testset for method in [KSVD.FullBatchMatchingPursuit,]

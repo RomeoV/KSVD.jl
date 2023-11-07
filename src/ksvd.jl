@@ -3,7 +3,7 @@ ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKS
 
 abstract type KSVDMethod end
 struct LegacyKSVD <: KSVDMethod end
-@kwdef struct OptimizedKSVD <: KSVDMethod 
+@kwdef struct OptimizedKSVD <: KSVDMethod
     shuffle_indices::Bool = true
 end
 @kwdef struct ParallelKSVD <: KSVDMethod
