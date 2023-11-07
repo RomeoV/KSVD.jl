@@ -10,43 +10,50 @@ import Profile
 using CUDA
 using FLoops
 
-const default_max_iter_mp = 20
+const default_max_nnz = 10
 const default_tolerance = 1e-6
 
 sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
 
 abstract type SparseCodingMethod end
-function validate_mp_args(max_iter, tolerance, other_args...)
+function validate_mp_args(max_nnz, max_iter, tolerance, other_args...)
+    max_nnz >= 1 || throw(ArgumentError("`max_nnz` must be > 0"))
     max_iter >= 1 || throw(ArgumentError("`max_iter` must be > 0"))
-    tolerance > 0. || throw(ArgumentError("`tolerance` must be > 0"))
+    tolerance >= 0. || throw(ArgumentError("`tolerance` must be >= 0"))
 end
 @kwdef struct LegacyMatchingPursuit <: SparseCodingMethod
-    max_iter::Int = default_max_iter_mp
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
     LegacyMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct MatchingPursuit <: SparseCodingMethod
-    max_iter::Int = default_max_iter_mp
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct ParallelMatchingPursuit <: SparseCodingMethod
-    max_iter::Int = default_max_iter_mp
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
     ParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct FasterParallelMatchingPursuit <: SparseCodingMethod
-    max_iter::Int = default_max_iter_mp
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
     FasterParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct FullBatchMatchingPursuit <: SparseCodingMethod
-    max_iter::Int = default_max_iter_mp
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
     FullBatchMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct CUDAAcceleratedMatchingPursuit <: SparseCodingMethod
-    max_iter::Int = default_max_iter_mp
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
     batch_size::Int = 1_000
     CUDAAcceleratedMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
@@ -56,7 +63,7 @@ end
         method::Union{MatchingPursuit, ParallelMatchingPursuit, FasterParallelMatchingPursuit, CUDAAcceleratedMatchingPursuit},
         data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
         products_init::Union{Nothing, AbstractVector}=nothing) :: SparseVector{T, Int} where T
-    (; tolerance, max_iter) = method
+    (; max_nnz, max_iter, tolerance) = method
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
@@ -67,6 +74,10 @@ end
 
     for i in 1:max_iter
         if norm(residual) < tolerance
+            return sparsevec(xdict, n_atoms)
+        end
+        if length(xdict) > max_nnz
+            pop!(xdict, findmin(abs, xdict)[2])
             return sparsevec(xdict, n_atoms)
         end
 
@@ -89,7 +100,8 @@ end
 
 """
     matching_pursuit(data::AbstractMatrix, dictionary::AbstractMatrix;
-                     max_iter::Int = $default_max_iter_mp,
+                     max_ite::Int = $default_max_nnz,
+                     max_iter::Int = 4*$default_max_nnz,
                      tolerance::Float64 = $default_tolerance)
 
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
@@ -281,7 +293,7 @@ end
 function matching_pursuit_(method::LegacyMatchingPursuit,
                            data::AbstractVector{T},
                            dictionary::AbstractMatrix{T}) where T
-    (; max_iter, tolerance) = method
+    (; max_nnz, max_iter, tolerance) = method
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
@@ -289,6 +301,10 @@ function matching_pursuit_(method::LegacyMatchingPursuit,
     xdict = DefaultDict{Int, T}(0.)
     for i in 1:max_iter
         if norm(residual) < tolerance
+            return sparsevec(xdict, n_atoms)
+        end
+        if length(xdict) > max_nnz
+            pop!(xdict, findmin(abs, xdict)[2])
             return sparsevec(xdict, n_atoms)
         end
 
