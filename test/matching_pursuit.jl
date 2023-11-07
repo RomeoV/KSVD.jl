@@ -1,5 +1,45 @@
-import Random: seed!, TaskLocalRNG
+import Random: seed!, TaskLocalRNG, rand!
+import SparseArrays
+import SparseArrays: sparse
+import StatsBase: sample
 
+@testset "Check 'correctness'" begin
+    # this test is actually very wonky and I'm not sure about the theory.
+    # For a very small number of true non-zero values, it seems we can make an algorithm that usually picks
+    # the correct basis and then can compute the coefficients exactly.
+    # However, for nnz >10 or so, it already performs much worse.
+    # It's definitely important to have a large dimensionality, so that the chance of two basis-vectors being "exchangable" is very low.
+    @testset for T in [Float32, Float64]
+        @testset for nnz in [3, 10]  # Note that this doesn't pass for larger nnz...
+            rng = TaskLocalRNG();
+            seed!(rng, 1)
+            D = 1000  # sample dimension
+            N = 100  # num samples
+            # nnz = 10  # num nonzeros
+            K = 1200  # dictionary dimension >= sample_dimension
+            basis = KSVD.init_dictionary(T, D, K)
+            Is = vcat([sample(rng, 1:K, nnz, replace=false) for _ in 1:N]...);
+            Js = vcat([fill(j, nnz) for j in 1:N]...)
+            Vs = rand!(rng, similar(Js, T)) .+ 1
+            X_true = sparse(Is, Js, Vs, K, N)
+            Y = basis * X_true
+
+            # pick the sparse assignments
+            X_recovered = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(max_nnz=nnz, max_iter=nnz^2, tolerance=0), Y, basis)
+
+            # update the coefficients after the basis is picked
+            for (i, col) in enumerate(eachcol(X_recovered))
+                inds = SparseArrays.nonzeroinds(col)
+                local_basis = basis[:, inds]
+                coeffs = local_basis \ Y[:, i]
+                X_recovered[inds, i] .= coeffs
+            end
+
+            # For large D, the basis vectors should be sufficiently different that this method above mostly works.
+            @test SparseArrays.nnz(abs.(X_recovered - X_true) .> 100*sqrt(eps(T))) == 0
+        end
+    end
+end
 
 @testset "Compare to Legacy Implementation." begin
     @testset for T in [Float64, Float32]
