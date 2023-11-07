@@ -1,16 +1,19 @@
 import DataStructures: DefaultDict
 import SparseArrays: sparsevec
+import Random: AbstractRNG, default_rng
 
 function SparseArrays.sparsevec(d::DefaultDict{Int, T}, m::Int) where T
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
 
-init_dictionary(n::Int, K::Int) = init_dictionary(Float64, n, K)
-function init_dictionary(T::Type, n::Int, K::Int)
+init_dictionary(                           n::Int, K::Int) = init_dictionary(default_rng(), n, K)
+init_dictionary(                  T::Type, n::Int, K::Int) = init_dictionary(default_rng(), T, n, K)
+init_dictionary(rng::AbstractRNG,          n::Int, K::Int) = init_dictionary(rng, Float64, n, K)
+function init_dictionary(rng::AbstractRNG, T::Type, n::Int, K::Int)
     # D must be a full-rank matrix
-    D = rand(n, K)
+    D = rand(rng, T, n, K)
     while rank(D, rtol=sqrt(min(n,K)*eps())) != min(n, K)
-        D = rand(T, n, K)
+        D = rand(rng, T, n, K)
     end
     D = convert(Matrix{T}, D)
 
