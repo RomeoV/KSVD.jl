@@ -69,7 +69,7 @@ end
     residual = copy(data)
     xdict = DefaultDict{Int, T}(0.)
 
-    products = (isnothing(products_init) ? dictionary' * residual : products_init)
+    products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
     products_abs = abs.(products)  # prealloc
 
     for i in 1:max_iter
@@ -85,11 +85,10 @@ end
         products_abs .= abs.(products)
         _, maxindex = findmax_fast(products_abs)
 
-        maxval = products[maxindex]
-        @inbounds atom = @view dictionary[:, maxindex]
+        a = products[maxindex]
+        atom = @view dictionary[:, maxindex]
+        @assert norm(atom) ≈ 1. norm(atom)
 
-        # c is the length of the projection of data onto atom
-        a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
         residual .-= a .* atom
         products .-= a .* @view DtD[:, maxindex]
 

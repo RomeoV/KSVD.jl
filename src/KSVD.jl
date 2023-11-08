@@ -15,7 +15,7 @@ export ksvd, matching_pursuit
 using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
-using Tullio
+# using Tullio
 using TimerOutputs
 # using MKLSparse
 
@@ -64,19 +64,17 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
 
     # D is a dictionary matrix that contains atoms for columns.
     @timeit to "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
+    @assert all(≈(1.0), norm.(eachcol(D)))
 
     p = Progress(max_iter)
     D_last = (trace_convergence ? similar(D) : nothing)
-
-    Eₖ_buffers = [similar(Y) for _ in 1:1]
-    E_Ω_buffers = [similar(Y) for _ in 1:Threads.nthreads()]
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
         @timeit to "Sparse coding" X_sparse = sparse_coding(sparse_coding_method, Y, D)
         trace_convergence && D_last .= copy(D)
         verbose && @info "Starting svd"
-        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse, err_buffers=Eₖ_buffers, err_gamma_buffers=E_Ω_buffers)
+        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse, svd_method=(i<=2 ? svd! : tsvd))
         trace_convergence && @info norm(D - D_last)
 
         # return if the number of zero entries are <= max_n_zeros

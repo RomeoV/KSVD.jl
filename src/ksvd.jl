@@ -2,6 +2,8 @@ import Random: shuffle
 import Transducers: tcollect
 using SparseMatricesCSR, ThreadedSparseCSR
 using Polyester
+using IterativeSolvers
+import LinearAlgebra: normalize!
 ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKSVD(), Y,D,X)
 
 abstract type KSVDMethod end
@@ -111,7 +113,7 @@ function ksvd2(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T},
     return D_cpy, X_cpy
 end
 
-function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
+function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
     N = size(Y, 2)
     # E .= Y - D*X
     # Instead of just computing the `D*X` we use ThreadedSparseCSR for a portable and
@@ -121,7 +123,7 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
     # X_t = sparse(findnz(X)[[2, 1, 3]]..., size(X)[[2,1]]...)
     E = method.E_buf
     E .= Y;
-    Xcsr_t = sparsecsr(findnz(X)[[2,1,3]]...);
+    Xcsr_t = sparsecsr(findnz(X)[[2,1,3]]..., reverse(size(X))...);
     @inbounds for (i, D_row) in enumerate(eachrow(D))
         # Signature bmul!(y, A, x, alpha, beta) produces
         # y = alpha*A*x + beta*y (y = A*x)
@@ -132,12 +134,9 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
     # end
 
     X_cpy = copy(X)
-    D_cpy = copy(D)
-
-    # preallocate error buffers
-    E_Ω_buffers = (!isnothing(err_buffers) ? err_gamma_buffers :
-                  (method.prealloc_buffers ? [similar(E) for _ in 1:Threads.nthreads()] :
-                   nothing))
+    D_cpy = method.D_cpy_buf
+    @assert all(≈(1.), norm.(eachcol(D)))
+    E_Ω_buffers = method.E_Ω_bufs
 
     # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
     basis_indices = (method.shuffle_indices ? shuffle(axes(X, 1)) : axes(X, 1))
@@ -172,9 +171,12 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
         @inbounds @views E_Ω[:, 1:length(ωₖ)] .= E[:, ωₖ]
         @inbounds @views for (j_dest, j) in enumerate(ωₖ)
             # E_Ω[:, j_dest] .+= D * X[:, j]
+            # See https://stackoverflow.com/a/52615073/5616591
+            # This seems to be faster than `findnz` because it doesn't allocate at all.
             rs = nzrange(X, j)
+            # E_Ω[:, j_dest] .+=  sum(D[:, rowvals(X)[rs]] * nonzeros(X)[rs], dims=2)
             for (k, X_val) in zip(rowvals(X)[rs], nonzeros(X)[rs])
-                E_Ω[:, j_dest] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
+                E_Ω[:, j_dest] .+=  X_val .* D[:, k]
             end
             # for (X_val, k) in findnz(X[:, j])
             #     E_Ω[:, j_dest] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
@@ -188,19 +190,17 @@ function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, 
         for (j, X_val) in zip(findnz(X[k, ωₖ])...)
             @inbounds @views E_Ω[:, j] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
         end
-        U, S, V = if size(E_Ω, 2) <= 5
-            svd!(E_Ω)
+
+        # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
+        if size(E_Ω, 2) <= 3
+            U, S, V = svd!(E_Ω)
+            @inbounds @views D_cpy[:, k] .= U[:, 1] * sign(U[1,1])
+            @inbounds @views X_cpy[k, ωₖ] .= S[1] .* V[:, 1] * sign(U[1,1])
         else
-            # tsvd(E_Ω)                 # second hotspot
-            svd!(E_Ω)
+            U, S, V = tsvd(E_Ω, 1; tolconv=10*eps())
+            @inbounds @views D_cpy[:, k] .= U[:, 1] * sign(U[1,1])
+            @inbounds @views X_cpy[k, ωₖ] .= S[1] .* V[:, 1] * sign(U[1,1])
         end
-        @inbounds @views D_cpy[:, k] .= U[:, 1]
-        @inbounds @views X_cpy[k, ωₖ] .= S[1] .* V[:, 1]
-        # reverse the local error matrix to be reused without copy
-        # Eₖ .-= D[:, k:k] * X[k:k, :]
-        # for (j, X_val) in zip(findnz(X[k, :])...)
-        #     @inbounds @views Eₖ_local[:, j] .-=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
-        # end
     end
     D, X = D_cpy, X_cpy
     return D, X
