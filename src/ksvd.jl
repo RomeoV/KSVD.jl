@@ -9,10 +9,16 @@ struct LegacyKSVD <: KSVDMethod end
 @kwdef struct OptimizedKSVD <: KSVDMethod
     shuffle_indices::Bool = false
 end
-@kwdef struct ParallelKSVD <: KSVDMethod
+@kwdef struct ParallelKSVD{T} <: KSVDMethod where T
+    E_buf::Matrix{T}
+    E_Ω_bufs::Vector{Matrix{T}}
+    D_cpy_buf::Matrix{T}
     shuffle_indices::Bool = false
-    prealloc_buffers::Bool=true
 end
+ParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.01) =
+    ParallelKSVD(E_buf=Matrix{T}(undef, emb_dim, n_samples),
+                 E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()],
+                 D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs))
 
 function ksvd(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
@@ -105,25 +111,25 @@ function ksvd2(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T},
     return D_cpy, X_cpy
 end
 
-function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; err_buffers::Union{Nothing, Vector{Matrix{T}}}=nothing, err_gamma_buffers::Union{Nothing, Vector{Matrix{T}}}=nothing) where T
+function ksvd(method::ParallelKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
     N = size(Y, 2)
-    E = err_buffers[1]
     # E .= Y - D*X
     # Instead of just computing the `D*X` we use ThreadedSparseCSR for a portable and
     # fast multithreaded sparse matmu implementation.
     # Alternatively consider MKLSparse, but that's not portable and more proprietary.
-    D_t = Matrix(transpose(D));
-    Xcsrt = sparsecsr(findnz(X)[[2,1,3]]...);
+    # D_t = Matrix(transpose(D));
     # X_t = sparse(findnz(X)[[2, 1, 3]]..., size(X)[[2,1]]...)
+    E = method.E_buf
     E .= Y;
-    # @inbounds for (i, D_row) in enumerate(eachrow(D))
-    #     # Signature bmul!(y, A, x, alpha, beta) produces
-    #     # y = alpha*A*x + beta*y (y = A*x)
-    #     @views ThreadedSparseCSR.bmul!(E[i, :], Xcsrt, D_row, -1, 1)
-    # end
-    @fastmath @batch for i in axes(D_t, 2)
-        @views E[i, :] .-= X' * D_t[:, i]
+    Xcsr_t = sparsecsr(findnz(X)[[2,1,3]]...);
+    @inbounds for (i, D_row) in enumerate(eachrow(D))
+        # Signature bmul!(y, A, x, alpha, beta) produces
+        # y = alpha*A*x + beta*y (y = A*x)
+        @views ThreadedSparseCSR.tmul!(E[i, :], Xcsr_t, D_row, -1, 1)
     end
+    # @fastmath @batch for i in axes(D_t, 2)
+    #     @views E[i, :] .-= X' * D_t[:, i]
+    # end
 
     X_cpy = copy(X)
     D_cpy = copy(D)
