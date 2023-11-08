@@ -1,6 +1,7 @@
 import DataStructures: DefaultDict
 import SparseArrays: sparsevec
 import Random: AbstractRNG, default_rng
+import Distributions: Binomial, quantile
 
 function SparseArrays.sparsevec(d::DefaultDict{Int, T}, m::Int) where T
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
@@ -10,15 +11,13 @@ init_dictionary(n::Int, K::Int) = init_dictionary(default_rng(), n, K)
 init_dictionary(::Type{T}, n::Int, K::Int) where {T} = init_dictionary(default_rng(), T, n, K)
 function init_dictionary(rng::AbstractRNG, T::Type, n::Int, K::Int)
     # D must be a full-rank matrix
-    D = rand(rng, T, n, K)
+    D = rand(rng, T, n, K) .- 0.5
     while rank(D, rtol=sqrt(min(n,K)*eps())) != min(n, K)
-        D = rand(rng, T, n, K)
+        D = rand(rng, T, n, K) .- 0.5
     end
     D = convert(Matrix{T}, D)
 
-    @inbounds for k in 1:K
-        D[:, k] ./= norm(@view(D[:, k]))
-    end
+    normalize!.(eachcol(D))
     return D
 end
 
@@ -52,3 +51,19 @@ end
 #     mask_rhs = reshape(mask, size(X, 1), 1)
 #     return Y - (D.*mask_lhs) * (mask_rhs.*X)
 # end
+
+# we need our buffers to be at least as wide as we have nonzero value in any row.
+# we use an upper bound for the percentage of nonzero values and model the distribution
+# of nonzero values per row as a binomial distribution
+# Here's a script to convince yourself
+#
+# gen() = sum(sample([0,1], ProbabilityWeights([0.99, 0.01]), 100_000))
+# histogram([gen() for _ in 1:1000])
+" Compute buffer size that is large enough with extremely high likelyhood."
+function compute_reasonable_buffer_size(N, pct_nz; failure_chance = eps())
+    D = Binomial(N, pct_nz)
+    quantile(D, 1-failure_chance)
+end
+
+reorient!(vec::AbstractVector) = vec .*= sign(first(vec))
+reorient(vec::AbstractVector) = vec .* sign(first(vec))
