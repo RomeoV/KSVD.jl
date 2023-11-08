@@ -47,6 +47,8 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
                              ksvd_method = OptimizedKSVD(),
                              sparse_coding_method = MatchingPursuit(),
                              max_iter::Int = 10,
+                             trace_convergence = false,
+                             show_progress=true,
                              verbose=false
                              ) where T
     to = TimerOutput()
@@ -64,19 +66,25 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     @timeit to "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
 
     p = Progress(max_iter)
+    D_last = (trace_convergence ? similar(D) : nothing)
+
+    Eₖ_buffers = [similar(Y) for _ in 1:1]
+    E_Ω_buffers = [similar(Y) for _ in 1:Threads.nthreads()]
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
         @timeit to "Sparse coding" X_sparse = sparse_coding(sparse_coding_method, Y, D)
+        trace_convergence && D_last .= copy(D)
         verbose && @info "Starting svd"
-        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse)
+        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse, err_buffers=Eₖ_buffers, err_gamma_buffers=E_Ω_buffers)
+        trace_convergence && @info norm(D - D_last)
 
         # return if the number of zero entries are <= max_n_zeros
         if sum(iszero, X) > max_n_zeros
             show(to)
             return D, X
         end
-        next!(p)
+        show_progress && next!(p)
     end
     show(to)
     return D, X
