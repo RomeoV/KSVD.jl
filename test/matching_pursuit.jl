@@ -24,19 +24,21 @@ import StatsBase: sample
             X_true = sparse(Is, Js, Vs, K, N)
             Y = basis * X_true
 
-            # pick the sparse assignments
-            X_recovered = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(max_nnz=nnz, max_iter=nnz^2, tolerance=0), Y, basis)
+            for _ in 1:10
+                # pick the sparse assignments
+                X_recovered = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(max_nnz=nnz, max_iter=typemax(Int), tolerance=0), Y, basis)
 
-            # update the coefficients after the basis is picked
-            for (i, col) in enumerate(eachcol(X_recovered))
-                inds = SparseArrays.nonzeroinds(col)
-                local_basis = basis[:, inds]
-                coeffs = local_basis \ Y[:, i]
-                X_recovered[inds, i] .= coeffs
+                # update the coefficients after the basis is picked
+                for (i, col) in enumerate(eachcol(X_recovered))
+                    inds = SparseArrays.nonzeroinds(col)
+                    local_basis = basis[:, inds]
+                    coeffs = local_basis \ Y[:, i]
+                    X_recovered[inds, i] .= coeffs
+                end
+
+                # For large D, the basis vectors should be sufficiently different that this method above mostly works.
+                @test SparseArrays.nnz(abs.(X_recovered - X_true) .> 100*sqrt(eps(T))) == 0
             end
-
-            # For large D, the basis vectors should be sufficiently different that this method above mostly works.
-            @test SparseArrays.nnz(abs.(X_recovered - X_true) .> 100*sqrt(eps(T))) == 0
         end
     end
 end
