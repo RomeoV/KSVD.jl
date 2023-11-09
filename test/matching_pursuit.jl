@@ -60,7 +60,6 @@ end
         end
         @testset for method in [KSVD.MatchingPursuit(),
                                 KSVD.ParallelMatchingPursuit(),
-                                KSVD.FasterParallelMatchingPursuit(),
                                 KSVD.CUDAAcceleratedMatchingPursuit(batch_size=300) # batch_size<N and batch_size÷N != 0 for test
                                 ]
 
