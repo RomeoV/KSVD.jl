@@ -203,7 +203,7 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
             put!(ch, data_batch)
         end
     end
-    ch_gpu_to_cpu = Channel{Matrix{T}}(1) do ch
+    ch_gpu_to_cpu = Channel{Matrix{T}}(1; spawn=true) do ch
         foreach(ch_cpu_to_gpu) do data_batch
             CUDA.@sync products_batch = Matrix(Dt_gpu * data_batch)
             put!(ch, products_batch)
