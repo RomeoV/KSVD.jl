@@ -7,7 +7,7 @@ function SparseArrays.sparsevec(d::DefaultDict{Int, T}, m::Int) where T
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
 
-init_dictionary(n::Int, K::Int) = init_dictionary(default_rng(), n, K)
+init_dictionary(n::Int, K::Int) = init_dictionary(Float64, n, K)
 init_dictionary(::Type{T}, n::Int, K::Int) where {T} = init_dictionary(default_rng(), T, n, K)
 function init_dictionary(rng::AbstractRNG, T::Type, n::Int, K::Int)
     # D must be a full-rank matrix
