@@ -31,12 +31,14 @@ end
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
+    precompute_products=true
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct ParallelMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
+    precompute_products=true
     ParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 @kwdef struct FasterParallelMatchingPursuit <: SparseCodingMethod
@@ -62,7 +64,7 @@ end
 @inbounds function matching_pursuit_(
         method::Union{MatchingPursuit, ParallelMatchingPursuit, FasterParallelMatchingPursuit, CUDAAcceleratedMatchingPursuit},
         data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-        products_init::Union{Nothing, AbstractVector}=nothing) :: SparseVector{T, Int} where T
+        products_init::Union{Nothing, AbstractVector{T}}=nothing) :: SparseVector{T, Int} where T
     (; max_nnz, max_iter, tolerance) = method
 
     n_atoms = size(dictionary, 2)
@@ -120,7 +122,8 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     end
 
     DtD = dictionary'*dictionary
-    products = dictionary' * data
+    # if the data is very large we might not want to precompute this.
+    products = (method.precompute_products ? (dictionary' * data) : fill(nothing, size(data, 2)))
 
     X_::Vector{SparseVector{T, Int}} = collect_fn(
         matching_pursuit_(
@@ -128,7 +131,7 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
                 datacol,
                 dictionary,
                 DtD;
-                products_init=productcol
+                products_init=(method.precompute_products ? productcol : nothing)
             )
         for (datacol, productcol) in zip(eachcol(data), eachcol(products))
     )
