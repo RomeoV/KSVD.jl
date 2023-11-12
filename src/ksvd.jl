@@ -11,6 +11,8 @@ struct LegacyKSVD <: KSVDMethod end
 @kwdef struct OptimizedKSVD <: KSVDMethod
     shuffle_indices::Bool = false
 end
+OptimizedKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.01) =
+    OptimizedKSVD()
 @kwdef struct ParallelKSVD{T} <: KSVDMethod where T
     E_buf::Matrix{T}
     E_Ω_bufs::Vector{Matrix{T}}
