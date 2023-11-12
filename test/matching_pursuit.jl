@@ -58,18 +58,15 @@ end
         if Threads.nthreads == 1
             @warn "Parallel implementation will only be tested properly if test is launched with multiple threads!"
         end
-        @testset for method in [KSVD.MatchingPursuit(),
-                                KSVD.ParallelMatchingPursuit(),
+        @testset for method in [KSVD.MatchingPursuit(precompute_products=false),
+                                KSVD.MatchingPursuit(precompute_products=true),
+                                KSVD.ParallelMatchingPursuit(precompute_products=true),
+                                KSVD.ParallelMatchingPursuit(precompute_products=false),
                                 KSVD.CUDAAcceleratedMatchingPursuit(batch_size=300) # batch_size<N and batch_size÷N != 0 for test
                                 ]
 
             res = KSVD.sparse_coding(method, data, B)
             @test res ≈ res_baseline rtol=sqrt(eps(T))
-            @test eltype(res) == T
-        end
-        @testset for method in [KSVD.FullBatchMatchingPursuit,]
-            res = KSVD.sparse_coding(method(), data, B)
-            @test res ≈ res_baseline broken=true
             @test eltype(res) == T
         end
     end
