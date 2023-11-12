@@ -97,7 +97,7 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
 
     DtD = dictionary'*dictionary
     # if the data is very large we might not want to precompute this.
-    products = (method.precompute_products ? (dictionary' * data) : fill(nothing, size(data, 2)))
+    products = (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
 
     X_::Vector{SparseVector{T, Int}} = collect_fn(
         matching_pursuit_(
