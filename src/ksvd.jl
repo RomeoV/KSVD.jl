@@ -11,7 +11,7 @@ struct LegacyKSVD <: KSVDMethod end
 @kwdef struct OptimizedKSVD <: KSVDMethod
     shuffle_indices::Bool = false
 end
-OptimizedKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.01) =
+OptimizedKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1) =
     OptimizedKSVD()
 @kwdef struct ParallelKSVD{T} <: KSVDMethod where T
     E_buf::Matrix{T}
@@ -19,7 +19,7 @@ OptimizedKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.
     D_cpy_buf::Matrix{T}
     shuffle_indices::Bool = false
 end
-ParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.01) =
+ParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1) =
     ParallelKSVD(E_buf=Matrix{T}(undef, emb_dim, n_samples),
                  E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()],
                  D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs))
