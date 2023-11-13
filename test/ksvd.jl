@@ -35,14 +35,16 @@ import Random: TaskLocalRNG, seed!
         # We don't expect to get the same results after one iteration for out-of-order operations.
         # We will test later for convergence though.
         @testset for method in [KSVD.OptimizedKSVD(shuffle_indices=true),
-                                KSVD.ParallelKSVD(prealloc_buffers=true),
-                                KSVD.ParallelKSVD(prealloc_buffers=false),
+                                KSVD.ParallelKSVD(Float64, E, 2*E, N),
+                                KSVD.ParallelKSVD(Float64, E, 2*E, N),
+                                KSVD.BatchedParallelKSVD(Float64, E, 2*E, N; batch_size_per_thread=1),
+                                KSVD.BatchedParallelKSVD(Float64, E, 2*E, N; batch_size_per_thread=4),
                                 ]
             D_res, X_res = KSVD.ksvd(method, data, copy(D), copy(X))
             signs1_res = sign.(eachcol(D_res) .|> first)
             @test all(≈(1.), norm.(eachcol(D_res)))
-            @test D_res.*signs1_res' ≈ D_baseline.*signs1_baseline' rtol=10*sqrt(eps(T)) broken=true
-            @test X_res.*signs1_res ≈ X_baseline.*signs1_baseline rtol=10*sqrt(eps(T)) broken=true
+            @test D_res.*signs1_res' ≈ D_baseline.*signs1_baseline' rtol=10*sqrt(eps(T)) skip=true;
+            @test X_res.*signs1_res ≈ X_baseline.*signs1_baseline rtol=10*sqrt(eps(T)) skip=true;
             @test eltype(D_res) == eltype(X_res) == T
         end
     end
