@@ -1,4 +1,7 @@
+module KSVDCudaExt
 using CUDA
+using KSVD
+
 """ CUDA Accelerated version pipelining the dictionary * data computation
 on the gpu, and using the result on the cpu. Always performs batching, i.e. uses
 limited memory even for large number of samples (however not for large embedding dimension).
@@ -9,7 +12,7 @@ batches of data with size number of samples `batch_size` are loaded, moved to th
 and the result is moved back to the cpu. This happens asynchronously, so that the memory movement
 CPU->GPU and GPU->CPU, aswell as the computation on the CPU, are pipelined using Julia's `Channel`s.
 """
-@kwdef struct CUDAAcceleratedMatchingPursuit <: SparseCodingMethodGPU
+@kwdef struct CUDAAcceleratedMatchingPursuit <: KSVD.GPUAcceleratedMatchingPursuit
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
     tolerance = default_tolerance
@@ -67,3 +70,5 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
     X = sparse(I,J,V, K, N)
     return X
 end
+
+end # KSVDCudaExt

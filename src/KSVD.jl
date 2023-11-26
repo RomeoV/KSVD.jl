@@ -64,7 +64,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     end
 
     X = spzeros(T, K, N)  # just for making X global in this function
-    max_n_zeros = ceil(Int, sparsity_allowance * length(X))
+    min_n_zeros = ceil(Int, sparsity_allowance * length(X))
 
     # D is a dictionary matrix that contains atoms for columns.
     @timeit to "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
@@ -76,14 +76,14 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
-        @timeit to "Sparse coding" X_sparse = sparse_coding(sparse_coding_method, Y, D)
+        @timeit to "Sparse coding" X = sparse_coding(sparse_coding_method, Y, D)
         trace_convergence && (D_last .= copy(D))
         verbose && @info "Starting svd"
-        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse, svd_method=(i<=2 ? svd! : tsvd))
-        trace_convergence && @info norm(D - D_last)
+        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X)
+        trace_convergence && @info norm(Y - D*X)
 
         # return if the number of zero entries are <= max_n_zeros
-        if sum(iszero, X) > max_n_zeros
+        if sum(iszero, X) > min_n_zeros
             show(to)
             return D, X
         end

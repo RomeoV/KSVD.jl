@@ -17,34 +17,41 @@ import Random: TaskLocalRNG, seed!
         X = sprand(rng, T, 2*E, N, 0.1)
 
         D_baseline, X_baseline = KSVD.ksvd(KSVD.LegacyKSVD(), data, copy(D), copy(X))
-        signs1_baseline = sign.(eachcol(D_baseline) .|> first)
         @test all(≈(1.), norm.(eachcol(D_baseline)))
         @test eltype(D_baseline) == eltype(X_baseline) == T
 
         # The solution is only unique up to the sign of each factor / the direction of each basis vector.
         # Therefore, we multiply each basis vector and factor with the sign of it's first element.
         # That forces the first element to be positive, and makes the solution unique and let's us run the comparison.
-        @testset for method in [KSVD.OptimizedKSVD(shuffle_indices=false), ]
+        @testset for method in [
+                KSVD.OptimizedKSVD(shuffle_indices=false),
+                KSVD.BatchedParallelKSVD{true, Float64}(shuffle_indices=false, batch_size_per_thread=1),
+                KSVD.BatchedParallelKSVD{false, Float64}(shuffle_indices=false, batch_size_per_thread=1),
+            ]
+            KSVD.maybe_init_buffers!(method, E, 2*E, N)
             D_res, X_res = KSVD.ksvd(method, data, copy(D), copy(X))
-            signs1_res = sign.(eachcol(D_res) .|> first)
+
+            @test D_res ≈ D_baseline rtol=10*sqrt(eps(T))
+            @test X_res ≈ X_baseline rtol=10*sqrt(eps(T))
+
             @test all(≈(1.), norm.(eachcol(D_res)))
-            @test D_res.*signs1_res' ≈ D_baseline.*signs1_baseline' rtol=10*sqrt(eps(T))
-            @test X_res.*signs1_res ≈ X_baseline.*signs1_baseline rtol=10*sqrt(eps(T))
             @test eltype(D_res) == eltype(X_res) == T
         end
         # We don't expect to get the same results after one iteration for out-of-order operations.
         # We will test later for convergence though.
-        @testset for method in [KSVD.OptimizedKSVD(shuffle_indices=true),
-                                KSVD.ParallelKSVD(Float64, E, 2*E, N),
-                                KSVD.ParallelKSVD(Float64, E, 2*E, N),
-                                KSVD.BatchedParallelKSVD(Float64, E, 2*E, N; batch_size_per_thread=1),
-                                KSVD.BatchedParallelKSVD(Float64, E, 2*E, N; batch_size_per_thread=4),
-                                ]
+        @testset for method in [
+                KSVD.BatchedParallelKSVD{true, Float64}(shuffle_indices=true, batch_size_per_thread=40),
+                KSVD.BatchedParallelKSVD{false, Float64}(shuffle_indices=true, batch_size_per_thread=40),
+                KSVD.ParallelKSVD{false, Float64}(shuffle_indices=false),
+                KSVD.ParallelKSVD{true, Float64}(shuffle_indices=false),
+            ]
+            KSVD.maybe_init_buffers!(method, E, 2*E, N)
             D_res, X_res = KSVD.ksvd(method, data, copy(D), copy(X))
-            signs1_res = sign.(eachcol(D_res) .|> first)
+
+            @test D_res ≈ D_baseline rtol=10*sqrt(eps(T)) skip=true;
+            @test X_res ≈ X_baseline rtol=10*sqrt(eps(T)) skip=true;
+
             @test all(≈(1.), norm.(eachcol(D_res)))
-            @test D_res.*signs1_res' ≈ D_baseline.*signs1_baseline' rtol=10*sqrt(eps(T)) skip=true;
-            @test X_res.*signs1_res ≈ X_baseline.*signs1_baseline rtol=10*sqrt(eps(T)) skip=true;
             @test eltype(D_res) == eltype(X_res) == T
         end
     end
