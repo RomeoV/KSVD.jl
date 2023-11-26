@@ -1,5 +1,5 @@
 """ The goal is to compute
-E = Y - DX
+E = Y - DX[idx, :]
 as fast as possible, where X is sparse and the rest dense.
 
 The main problem is that dense times sparse isn't really widely implemented, so we try a variety of
@@ -14,38 +14,68 @@ using Polyester
 using SparseArrays
 using SparseMatricesCSR, ThreadedSparseCSR
 using MKLSparse
+import LinearAlgebra: Adjoint
+import SparseArrays: mul!
+
+# this seems to be fastest, which is nice :)
+function no_transpose_polyester_mul!(C::AbstractMatrix, A::AbstractMatrix, B::SparseMatrixCSC, α::Number, β::Number)
+    @inbounds @batch for j in axes(B, 2)
+        C[:, j] .*= β
+        C[:, j] .+= A * (α.*B[:, j])
+    end
+    return C
+end
+function no_transpose_polyester_mul!(C::AbstractMatrix, X, D, idx)
+    no_transpose_polyester_mul!(E, D[:, idx], X[idx, :], -1, 1)
+end
+
+# rs = nzrange(X, j)
+# @views E_Ω[:, j_dest] .+=  D[:, rowvals(X)[rs]] * nonzeros(X)[rs]
+function another_mul2!(C::AbstractMatrix, A::AbstractMatrix, B::SparseMatrixCSC, α::Number, β::Number)
+    @batch for j in axes(B, 2)
+        # @views E_Ω[:, j_dest] .+=  D[:, rowvals(X)[rs]] * nonzeros(X)[rs]
+        rs = nzrange(B, j)
+        C[:, j] .*= β
+        C[:, j] .+= A[:, rowvals(B)[rs]] * (α.*nonzeros(B)[rs])
+    end
+    return C
+end
 
 # 32ms, 85MB
-function manual_polyester!(E, X::AbstractSparseArray, D)
-    D_t = Matrix(transpose(D))
+function manual_polyester!(E, X::AbstractSparseArray, D, idx)
+    D_t = Matrix(transpose(@view D[:, idx]))
     @fastmath @batch for i in axes(D_t, 2)
-        @views E[i, :] .-= X' * D_t[:, i]
+        E[i, :] .-= X[idx, :]' * @view D_t[:, i]
     end
     return E
 end
 
 # 32ms, 85MB
-function manual_polyester_no_t!(E, X::AbstractSparseArray, D)
+function manual_polyester_no_t!(E, X::AbstractSparseArray, D, idx)
     # D_t = Matrix(transpose(D))
-    @fastmath @batch for i in axes(D, 1)
-        @views E[i, :] .-= X' * D[i, :]
+    @batch for i in axes(D, 1)
+        E[i, :] .-= X[idx, :]' * @view D[i, idx]
     end
     return E
 end
+
+
 
 # 27ms, 7MB
-function threadedsparsemul!(E, X::AbstractSparseArray, D)
-    Xcsrt = sparsecsr(findnz(X)[[2,1,3]]...);
-    @inbounds for (i, D_row) in enumerate(eachrow(D))
+mysparsecsr(M_t::Adjoint{<:Real, <:SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]]..., size(M_t)...)
+function threadedsparsemul!(E, X::AbstractSparseArray, D, idx)
+    Xcsrt = mysparsecsr(X[idx, :]')
+    @inbounds for (i, D_row) in enumerate(eachrow(@view D[:, idx]))
         # Signature bmul!(y, A, x, alpha, beta) produces
         # y = alpha*A*x + beta*y (y = A*x)
-        @views ThreadedSparseCSR.bmul!(E[i, :], Xcsrt, D_row, -1, 1)
+        ThreadedSparseCSR.bmul!((@view E[i, :]), Xcsrt, D_row, -1, 1)
     end
     return E
 end
-function threadedsparsemul_no_polyester!(E, X::AbstractSparseArray, D)
-    Xcsrt = sparsecsr(findnz(X)[[2,1,3]]...);
-    @inbounds for (i, D_row) in enumerate(eachrow(D))
+function threadedsparsemul_no_polyester!(E, X::AbstractSparseArray, D, idx)
+    # Xcsrt = sparsecsr(findnz(X[idx, :])[[2,1,3]]...);
+    Xcsrt = mysparsecsr(X[idx, :]')
+    @inbounds for (i, D_row) in enumerate(eachrow(@view D[:, idx]))
         # Signature bmul!(y, A, x, alpha, beta) produces
         # y = alpha*A*x + beta*y (y = A*x)
         @views ThreadedSparseCSR.tmul!(E[i, :], Xcsrt, D_row, -1, 1)
@@ -58,26 +88,39 @@ function intel_mkl_mul!(E, X::AbstractSparseArray, D)
     D_t = Matrix(transpose(D));
     E .-= transpose(.-X'*D_t)
 end
+function intel_mkl_mul!(E, X::AbstractSparseArray, D, idx)
+    D_t = Matrix(transpose(D[:, idx]));
+    E .-= transpose(.-X[idx, :]'*D_t)
+end
+
+function intel_mkl_mul_no_t!(E, X::AbstractSparseArray, D, idx)
+    D_t = Matrix(transpose(D[:, idx]));
+    E .-= (@view D[:,idx])*X[idx,:]
+end
 
 # 49ms, 76MB
-function plain_matmul!(E, X::AbstractSparseArray, D)
-    E .-= D*X
+function plain_matmul!(E, X::AbstractSparseArray, D, idx)
+    E .-= (@view D[:, idx])*X[idx, :]
 end
 
 spmul_functions = [manual_polyester!,
-                  manual_polyester_no_t!,
-                  threadedsparsemul!,
-                  # threadedsparsemul_no_polyester!,  # this is insanely slow...
-                  intel_mkl_mul!,
-                  plain_matmul!,]
+                   manual_polyester_no_t!,
+                   threadedsparsemul!,
+                   # threadedsparsemul_no_polyester!,  # this is insanely slow...
+                   intel_mkl_mul!,
+                   intel_mkl_mul_no_t!,
+                   no_transpose_polyester_mul!,
+                   plain_matmul!,
+                   ]
 
-function run_sparse_matmul_benchmarks(; N=10_000, d=1_000, K=2_000, pct_nnz=0.01)
+function run_sparse_matmul_benchmarks_idx(; N=10_000, d=1_000, K=2_000, pct_nnz=0.01)
     E = rand(d, N)
     X = sprand(K, N, pct_nnz)
     D = rand(d, K)
+    idx = [1:10...]
 
     bmres = Dict(
-        string(f) => @benchmark $f($E, $X, $D)
+        string(f) => @benchmark $f($E, $X, $D, $idx)
         for f in spmul_functions
     )
 
@@ -87,9 +130,10 @@ function compare_sparse_matmul_implementations(; N=10_000, d=1_000, K=2_000, pct
     E = rand(d, N)
     X = sprand(K, N, pct_nnz)
     D = rand(d, K)
+    idx=[1:20...]
 
     eval_res = Dict(
-        string(f) => f(copy(E), X, D)
+        string(f) => f(copy(E), X, D, idx)
         for f in spmul_functions
     )
     baseline = eval_res["plain_matmul!"]
