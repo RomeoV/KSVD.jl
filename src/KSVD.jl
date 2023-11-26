@@ -10,14 +10,18 @@ module KSVD
 # If you try to read the code, I recommend you to see Figure 2 first.
 #
 
-export ksvd, matching_pursuit
+export dictionary_learning, matching_pursuit
+export LegacyKSVD, OptimizedKSVD, ParallelKSVD, ParallelBatchedKSVD
+export LegacyMatchingPursuit, ParallelMatchingPursuit
 
 using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
-# using Tullio
+import Transducers: tcollect
+import LinearAlgebra: normalize!
 using TimerOutputs
-# using MKLSparse
+
+using ThreadedDenseSparseMul
 
 
 include("util.jl")
@@ -68,11 +72,12 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
 
     p = Progress(max_iter)
     D_last = (trace_convergence ? similar(D) : nothing)
+    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=1.0)
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
         @timeit to "Sparse coding" X_sparse = sparse_coding(sparse_coding_method, Y, D)
-        trace_convergence && D_last .= copy(D)
+        trace_convergence && (D_last .= copy(D))
         verbose && @info "Starting svd"
         @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X_sparse, svd_method=(i<=2 ? svd! : tsvd))
         trace_convergence && @info norm(D - D_last)
