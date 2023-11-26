@@ -1,9 +1,4 @@
 import Random: shuffle
-import Transducers: tcollect
-using SparseMatricesCSR, ThreadedSparseCSR
-using Polyester
-using IterativeSolvers
-import LinearAlgebra: normalize!
 ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKSVD(), Y,D,X)
 
 abstract type KSVDMethod end
@@ -13,29 +8,36 @@ struct LegacyKSVD <: KSVDMethod end
 end
 OptimizedKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1) =
     OptimizedKSVD()
-@kwdef struct ParallelKSVD{T} <: KSVDMethod where T
-    E_buf::Matrix{T}
-    E_Ω_bufs::Vector{Matrix{T}}
-    D_cpy_buf::Matrix{T}
+@kwdef mutable struct ParallelKSVD{precompute_error, T} <: KSVDMethod where T
+    E_buf::Matrix{T} = T[;;]
+    E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
+    D_cpy_buf::Matrix{T} = T[;;]
     shuffle_indices::Bool = false
 end
-ParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1) =
-    ParallelKSVD(E_buf=Matrix{T}(undef, emb_dim, n_samples),
-                 E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()],
-                 D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs))
+# ParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1) =
+#     ParallelKSVD(E_buf=Matrix{T}(undef, emb_dim, n_samples),
+#                  E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()],
+#                  D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs))
 
-@kwdef struct BatchedParallelKSVD{T} <: KSVDMethod where T
-    E_buf::Matrix{T}
-    E_Ω_bufs::Vector{Matrix{T}}
-    D_cpy_buf::Matrix{T}
+@kwdef mutable struct BatchedParallelKSVD{precompute_error, T} <: KSVDMethod where T
+    E_buf::Matrix{T} = T[;;]
+    E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
+    D_cpy_buf::Matrix{T} = T[;;]
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
 end
-BatchedParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1, kwargs...) =
-    BatchedParallelKSVD(E_buf=Matrix{T}(undef, emb_dim, n_samples),
-                        E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()],
-                        D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs);
-                        kwargs...)
+# BatchedParallelKSVD(T::Type, emb_dim::Int, n_dict_vecs::Int, n_samples::Int; pct_nz=0.1, kwargs...) =
+#     BatchedParallelKSVD(E_buf=Matrix{T}(undef, emb_dim, n_samples),
+#                         E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()],
+#                         D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs);
+#                         kwargs...)
+
+maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
+function maybe_init_buffers!(method::Union{ParallelKSVD{I, T}, BatchedParallelKSVD{I, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {I, T<:Real}
+    method.E_buf=Matrix{T}(undef, emb_dim, n_samples)
+    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
+    method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
+end
 
 function ksvd(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
@@ -74,21 +76,50 @@ function make_index_batches(method::BatchedParallelKSVD, axis)
     return Iterators.partition(basis_indices, method.batch_size_per_thread*Threads.nthreads())
 end
 
-@inbounds function ksvd(method::Union{ParallelKSVD, BatchedParallelKSVD}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
+sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]]..., size(Mt)...)
+@inbounds function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
     N = size(Y, 2)
-    # First, we try to compute
-    # E .= Y - D*X
-    # Instead of just computing the `D*X` we use ThreadedSparseCSR for a portable and
-    # fast multithreaded sparse matmu implementation.
-    # Alternatively consider MKLSparse, but that's not portable and more proprietary, and also not faster.
-    E = method.E_buf
-    E .= Y;
-    Xcsr_t = sparsecsr(findnz(X)[[2,1,3]]..., reverse(size(X))...);
-    for (i, D_row) in enumerate(eachrow(D))
-        # Signature bmul!(y, A, x, alpha, beta) produces
-        # y = alpha*A*x + beta*y (y = A*x)
-        @views ThreadedSparseCSR.bmul!(E[i, :], Xcsr_t, D_row, -1, 1)
+
+    X_cpy = copy(X)
+    D_cpy = method.D_cpy_buf
+    @assert all(≈(1.), norm.(eachcol(D)))
+    E_Ω_buffers = method.E_Ω_bufs
+
+    # We iterate over each basis vector, either in one big batch or many small batches,
+    # depending on the method.
+    index_batches = make_index_batches(method, axes(X, 1))
+    for index_batch in index_batches
+        # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
+        Threads.@threads :static for k in index_batch
+            xₖ = X[k, :]
+            all(iszero, xₖ) && continue
+            ωₖ = findall(!iszero, xₖ)
+            E_Ω = (!isnothing(E_Ω_buffers) ? let
+                        buf = E_Ω_buffers[Threads.threadid()]  # See :static note above.
+                        @view buf[:, 1:length(ωₖ)]
+                end : similar(Y, size(Y, 1), length(ωₖ)))
+
+            # make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
+            E_Ω .= @view(Y[:, ωₖ]) - D * X[:, ωₖ]
+            E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
+
+
+            # truncated svd has some problems for column matrices. so then we just do svd.
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=1000*eps(eltype(E_Ω))))
+            # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
+            D_cpy[:, k] .= sign(U[1,1]) .* U[:, 1]
+            X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* V[:, 1]
+        end
+        D[:, index_batch] .= D_cpy[:, index_batch]
+        X[:, index_batch] .= X_cpy[:, index_batch]
     end
+    return D, X
+end
+
+@inbounds function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
+    N = size(Y, 2)
+    E = method.E_buf
+    E .= D * X
 
     X_cpy = copy(X)
     D_cpy = method.D_cpy_buf
@@ -109,26 +140,19 @@ end
                         @view buf[:, 1:length(ωₖ)]
                 end : similar(E, size(E, 1), length(ωₖ)))
 
-            @views E_Ω[:, 1:length(ωₖ)] .= E[:, ωₖ]
-            for (j_dest, j) in enumerate(ωₖ)
-                # We basically do this, but the basic version is insanely slow...
-                # E_Ω[:, j_dest] .+= D * X[:, j]
-                # Instead we do the method inspired by See https://stackoverflow.com/a/52615073/5616591
-                rs = nzrange(X, j)
-                @views E_Ω[:, j_dest] .+=  D[:, rowvals(X)[rs]] * nonzeros(X)[rs]
-            end
-            for (j, X_val) in zip(findnz(X[k, ωₖ])...) # we could also remove this allocation, but it's not much.
-                @views E_Ω[:, j] .+=  X_val .* D[:, k]  # this compiles to something similar to axpy!, i.e. no allocations. Notice we need the dot also for the scalar mul.
-            end
+            E_Ω .= @view E[:, ωₖ]
+            E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
 
             # truncated svd has some problems for column matrices. so then we just do svd.
             U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=1000*eps(eltype(E_Ω))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
-            @views D_cpy[:, k] .= U[:, 1] * sign(U[1,1])
-            @views X_cpy[k, ωₖ] .= S[1] .* V[:, 1] * sign(U[1,1])
+            D_cpy[:, k] .= @view(U[:, 1]) * sign(U[1,1])
+            X_cpy[k, ωₖ] .= S[1] .* @view(V[:, 1]) * sign(U[1,1])
         end
-        @views D[:, index_batch] .= D_cpy[:, index_batch]
-        @views X[:, index_batch] .= X_cpy[:, index_batch]
+
+        E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X[index_batch, :]
+        D[:, index_batch] .= D_cpy[:, index_batch]
+        X[:, index_batch] .= X_cpy[:, index_batch]
     end
     return D, X
 end
