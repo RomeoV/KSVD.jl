@@ -72,7 +72,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
 
     p = Progress(max_iter)
     D_last = (trace_convergence ? similar(D) : nothing)
-    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=1.0)
+    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=10*sparse_coding_method.max_nnz/K)
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
