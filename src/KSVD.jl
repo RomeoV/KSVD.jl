@@ -11,7 +11,7 @@ module KSVD
 #
 
 export dictionary_learning, matching_pursuit, ksvd_update
-export LegacyKSVD, OptimizedKSVD, ParallelKSVD, ParallelBatchedKSVD
+export LegacyKSVD, OptimizedKSVD, ParallelKSVD, BatchedParallelKSVD
 export LegacyMatchingPursuit, ParallelMatchingPursuit
 
 using ProgressMeter
