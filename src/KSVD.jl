@@ -21,7 +21,7 @@ import Transducers: tcollect
 import LinearAlgebra: normalize!
 using TimerOutputs
 
-using ThreadedDenseSparseMul
+# using ThreadedDenseSparseMul
 
 
 include("util.jl")
