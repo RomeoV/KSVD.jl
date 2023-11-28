@@ -4,6 +4,7 @@ using LinearAlgebra
 using DataStructures
 using Transducers
 import SparseArrays: nonzeroinds
+import Base: @kwdef
 
 const default_max_nnz = 10
 const default_tolerance = 1e-6

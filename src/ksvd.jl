@@ -1,4 +1,5 @@
 import Random: shuffle
+import Base: @kwdef
 
 ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKSVD(), Y, D, X)
 
