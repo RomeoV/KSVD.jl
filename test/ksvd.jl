@@ -25,8 +25,8 @@ import Random: TaskLocalRNG, seed!
         # That forces the first element to be positive, and makes the solution unique and let's us run the comparison.
         @testset for method in [
                 KSVD.OptimizedKSVD(shuffle_indices=false),
-                KSVD.BatchedParallelKSVD{true, Float64}(shuffle_indices=false, batch_size_per_thread=1),
-                KSVD.BatchedParallelKSVD{false, Float64}(shuffle_indices=false, batch_size_per_thread=1),
+                KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=false, batch_size_per_thread=1),
+                KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=false, batch_size_per_thread=1),
             ]
             KSVD.maybe_init_buffers!(method, E, 2*E, N)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
@@ -40,10 +40,10 @@ import Random: TaskLocalRNG, seed!
         # We don't expect to get the same results after one iteration for out-of-order operations.
         # We will test later for convergence though.
         @testset for method in [
-                KSVD.BatchedParallelKSVD{true, Float64}(shuffle_indices=true, batch_size_per_thread=40),
-                KSVD.BatchedParallelKSVD{false, Float64}(shuffle_indices=true, batch_size_per_thread=40),
-                KSVD.ParallelKSVD{false, Float64}(shuffle_indices=false),
-                KSVD.ParallelKSVD{true, Float64}(shuffle_indices=false),
+                KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=true, batch_size_per_thread=40),
+                KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=true, batch_size_per_thread=40),
+                KSVD.ParallelKSVD{false, T}(shuffle_indices=false),
+                KSVD.ParallelKSVD{true, T}(shuffle_indices=false),
             ]
             KSVD.maybe_init_buffers!(method, E, 2*E, N)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))

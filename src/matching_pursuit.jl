@@ -6,7 +6,7 @@ using Transducers
 import SparseArrays: nonzeroinds
 
 const default_max_nnz = 10
-const default_tolerance = 1e-6
+const default_rtol = 1e-6
 
 abstract type SparseCodingMethod end
 """ 'Baseline' single threaded but optimized implementation.
@@ -15,7 +15,7 @@ abstract type SparseCodingMethod end
 `max_nnz` controls the maximum number of non-zero values (i.e. of basis vectors) that
 are summed up to reconstruct a data sample.
 
-`tolerance` controls when the search for more/improved basis vectors may be stopped,
+`rtol` controls when the search for more/improved basis vectors may be stopped,
 i.e. when `norm(y - Dx) < tol` (that is the L2 norm).
 
 `precompute_products` controls whether the computation `D'*Y` is computed once in the beginning.
@@ -25,7 +25,7 @@ may use too much memory, e.g. if the data is too large to fit into memory (see `
 @kwdef struct MatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
-    tolerance = default_tolerance
+    rtol = default_rtol
     precompute_products=true
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
@@ -38,7 +38,7 @@ For description of parameters see `MatchingPursuit`.
 @kwdef struct ParallelMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
-    tolerance = default_tolerance
+    rtol = default_rtol
     precompute_products=true
     ParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
@@ -55,13 +55,13 @@ Useful for comparison and didactic purposes, but much much slower. """
 @kwdef struct LegacyMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
-    tolerance = default_tolerance
+    rtol = default_rtol
     LegacyMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
-function validate_mp_args(max_nnz, max_iter, tolerance, other_args...)
+function validate_mp_args(max_nnz, max_iter, rtol, other_args...)
     max_nnz >= 1 || throw(ArgumentError("`max_nnz` must be > 0"))
     max_iter >= 1 || throw(ArgumentError("`max_iter` must be > 0"))
-    tolerance >= 0. || throw(ArgumentError("`tolerance` must be >= 0"))
+    0. <= rtol <= 1. || throw(ArgumentError("`rtol` must be in [0,1]"))
 end
 
 sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
@@ -116,17 +116,18 @@ end
         method::Union{MatchingPursuit, ParallelMatchingPursuit, GPUAcceleratedMatchingPursuit},
         data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
         products_init::Union{Nothing, AbstractVector{T}}=nothing) :: SparseVector{T, Int} where T
-    (; max_nnz, max_iter, tolerance) = method
+    (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
     xdict = DefaultDict{Int, T}(0.)
+    norm_data = norm(data)
 
     products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
     products_abs = abs.(products)  # prealloc
 
     for i in 1:max_iter
-        if norm(residual) < tolerance
+        if norm(residual)/norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
         if length(xdict) > max_nnz
@@ -171,14 +172,15 @@ end
 function matching_pursuit_(method::LegacyMatchingPursuit,
                            data::AbstractVector{T},
                            dictionary::AbstractMatrix{T}) where T
-    (; max_nnz, max_iter, tolerance) = method
+    (; max_nnz, max_iter, rtol) = method
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
+    norm_data = norm(data)
 
     xdict = DefaultDict{Int, T}(0.)
     for i in 1:max_iter
-        if norm(residual) < tolerance
+        if norm(residual)/norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
         if length(xdict) > max_nnz
