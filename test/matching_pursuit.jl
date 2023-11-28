@@ -26,7 +26,7 @@ import StatsBase: sample
 
             for _ in 1:10
                 # pick the sparse assignments
-                X_recovered = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(max_nnz=nnz, max_iter=typemax(Int), tolerance=0), Y, basis)
+                X_recovered = KSVD.sparse_coding(KSVD.LegacyMatchingPursuit(max_nnz=nnz, max_iter=typemax(Int), rtol=0), Y, basis)
 
                 # update the coefficients after the basis is picked
                 for (i, col) in enumerate(eachcol(X_recovered))

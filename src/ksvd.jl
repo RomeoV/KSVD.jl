@@ -101,7 +101,7 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
 
 
             # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=1000*eps(eltype(E_Ω))))
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=100*eps(eltype(E_Ω))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
@@ -141,7 +141,7 @@ end
             E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
 
             # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=1000*eps(eltype(E_Ω))))
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=100*eps(eltype(E_Ω))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
