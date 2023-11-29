@@ -96,9 +96,10 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
             end
 
             # make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
-            E_Ω .= @view(Y[:, ωₖ]) - D * X[:, ωₖ]
-            E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
-
+            # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
+            E_Ω .= Y[:, ωₖ]
+            fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
+            fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
 
             # truncated svd has some problems for column matrices. so then we just do svd.
             U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=100*eps(eltype(E_Ω))))
@@ -117,7 +118,9 @@ end
 
     N = size(Y, 2)
     E = method.E_buf
-    E .= Y - D * X
+    # E = Y - D*X
+    E .= Y
+    fastdensesparsemul_threaded!(E, D, X, -1, 1)
 
     X_cpy = copy(X)
     D_cpy = method.D_cpy_buf
@@ -137,8 +140,9 @@ end
                 @view buf[:, 1:length(ωₖ)]
             end
 
-            E_Ω .= @view E[:, ωₖ]
-            E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
+            E_Ω .= E[:, ωₖ]
+            # E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
+            fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
 
             # truncated svd has some problems for column matrices. so then we just do svd.
             U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=100*eps(eltype(E_Ω))))
@@ -147,7 +151,9 @@ end
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
         end
 
-        E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
+        # E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
+        fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
+        fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
         D[:, index_batch] .= D_cpy[:, index_batch]
         X[index_batch, :] .= X_cpy[index_batch, :]
     end

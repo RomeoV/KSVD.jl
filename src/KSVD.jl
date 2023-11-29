@@ -24,7 +24,7 @@ using TimerOutputs
 # importing StatsBase is also fine.
 mean(vec::AbstractVector) = sum(vec)/length(vec)
 
-# using ThreadedDenseSparseMul
+using ThreadedDenseSparseMul
 
 
 include("util.jl")
