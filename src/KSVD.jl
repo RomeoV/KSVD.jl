@@ -21,6 +21,9 @@ import Transducers: tcollect
 import LinearAlgebra: normalize!
 using TimerOutputs
 
+# importing StatsBase is also fine.
+mean(vec::AbstractVector) = sum(vec)/length(vec)
+
 # using ThreadedDenseSparseMul
 
 
@@ -71,16 +74,14 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     @assert all(≈(1.0), norm.(eachcol(D)))
 
     p = Progress(max_iter)
-    D_last = (trace_convergence ? similar(D) : nothing)
-    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=10*sparse_coding_method.max_nnz/K)
+    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=min(100*sparse_coding_method.max_nnz/K, 1))
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
         @timeit to "Sparse coding" X = sparse_coding(sparse_coding_method, Y, D)
-        trace_convergence && (D_last .= copy(D))
         verbose && @info "Starting svd"
         @timeit to "KSVD" D, X = ksvd_update(ksvd_method, Y, D, X)
-        trace_convergence && @info norm(Y - D*X)
+        trace_convergence && @spawn (@info "loss=$(norm(Y - D*X)), nnz_col=$(mean(sum.(!iszero, eachcol(X))))")
 
         # return if the number of zero entries are <= max_n_zeros
         if sum(iszero, X) > min_n_zeros
