@@ -1,4 +1,5 @@
 import Random: shuffle
+import SparseArrays: nzvalview
 
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_update(OptimizedKSVD(), Y, D, X)
 
@@ -97,7 +98,7 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
 
             # make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
             # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
-            E_Ω .= Y[:, ωₖ]
+            E_Ω .= @view Y[:, ωₖ]
             fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
             fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
 
@@ -107,8 +108,13 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
         end
-        D[:, index_batch] .= D_cpy[:, index_batch]
-        X[index_batch, :] .= X_cpy[index_batch, :]
+        D[:, index_batch] .= @view D_cpy[:, index_batch]
+        # X[index_batch, :] .= X_cpy[index_batch, :]
+        # we can exploit that the new nonzero indices don't change!
+        # Note: This doesn't seem to help in the sparse copy above.
+        row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+
     end
     return D, X
 end
@@ -155,7 +161,11 @@ end
         fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
         fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
         D[:, index_batch] .= D_cpy[:, index_batch]
-        X[index_batch, :] .= X_cpy[index_batch, :]
+        # X[index_batch, :] .= X_cpy[index_batch, :]
+        # we can exploit that the new nonzero indices don't change!
+        # Note: This doesn't seem to help in the sparse copy above.
+        row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
     end
     return D, X
 end
