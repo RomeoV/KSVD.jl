@@ -2,6 +2,12 @@ import Random: seed!, TaskLocalRNG, rand!
 import SparseArrays
 import SparseArrays: sparse
 import StatsBase: sample
+test_cuda_ext = try
+    using CUDA, FLoops
+    true
+catch
+    false
+end
 
 @testset "Check 'correctness'" begin
     # this test is actually very wonky and I'm not sure about the theory.
@@ -62,7 +68,7 @@ end
                                      KSVD.MatchingPursuit(precompute_products=true),
                                      KSVD.ParallelMatchingPursuit(precompute_products=true),
                                      KSVD.ParallelMatchingPursuit(precompute_products=false)],
-                                     try [KSVD.CUDAAcceleratedMatchingPursuit()]; catch e; [] end)
+                                     (test_cuda_ext ? [KSVD.CUDAAcceleratedMatchingPursuit()] : []))
 
             res = KSVD.sparse_coding(method, data, B)
             @test res ≈ res_baseline rtol=sqrt(eps(T))
