@@ -34,4 +34,4 @@ test = ["Test", "ReTest", "StatsBase"]
 
 [compat]
 julia = "1.9"
-ThreadedDenseSparseMul = "0.2"
+ThreadedDenseSparseMul = "0.4"
