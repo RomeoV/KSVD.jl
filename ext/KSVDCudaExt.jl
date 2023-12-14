@@ -1,26 +1,11 @@
 module KSVDCudaExt
 using CUDA
 using KSVD
+import KSVD: sparse_coding, CUDAAcceleratedMatchingPursuit
+using FLoops
+using SparseArrays: sparse, nonzeroinds, nonzeros
 
-""" CUDA Accelerated version pipelining the dictionary * data computation
-on the gpu, and using the result on the cpu. Always performs batching, i.e. uses
-limited memory even for large number of samples (however not for large embedding dimension).
-
-For description of parameters see `MatchingPursuit`.
-Notice that this method never precomputes the full product matrix `D'*Y`. Instead
-batches of data with size number of samples `batch_size` are loaded, moved to the GPU, multiplied there,
-and the result is moved back to the cpu. This happens asynchronously, so that the memory movement
-CPU->GPU and GPU->CPU, aswell as the computation on the CPU, are pipelined using Julia's `Channel`s.
-"""
-@kwdef struct CUDAAcceleratedMatchingPursuit <: KSVD.GPUAcceleratedMatchingPursuit
-    max_nnz::Int = default_max_nnz
-    max_iter::Int = 4*max_nnz
-    tolerance = default_tolerance
-    batch_size::Int = 1_000
-    CUDAAcceleratedMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
-end
-
-function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
+function KSVD.sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
     K = size(dictionary, 2)
     N = size(data, 2)
 
@@ -53,7 +38,7 @@ function sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMat
         @debug "Processing $j_batch"
         @floop for (j_, j) in zip(j_batch, axes(products_batch, 2))
             datacol = @view data[:, j]; productcol = @view products_batch[:, j]
-            data_vec = matching_pursuit_(
+            data_vec = KSVD.matching_pursuit_(
                             method,
                             datacol,
                             dictionary,
