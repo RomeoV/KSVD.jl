@@ -50,6 +50,24 @@ To be instantiated in extensions, e.g. `CUDAAccelMatchingPursuit`.
 """
 abstract type GPUAcceleratedMatchingPursuit <: SparseCodingMethod end;
 
+""" CUDA Accelerated version pipelining the dictionary * data computation
+on the gpu, and using the result on the cpu. Always performs batching, i.e. uses
+limited memory even for large number of samples (however not for large embedding dimension).
+
+For description of parameters see `MatchingPursuit`.
+Notice that this method never precomputes the full product matrix `D'*Y`. Instead
+batches of data with size number of samples `batch_size` are loaded, moved to the GPU, multiplied there,
+and the result is moved back to the cpu. This happens asynchronously, so that the memory movement
+CPU->GPU and GPU->CPU, aswell as the computation on the CPU, are pipelined using Julia's `Channel`s.
+"""
+@kwdef struct CUDAAcceleratedMatchingPursuit <: GPUAcceleratedMatchingPursuit
+    max_nnz::Int = KSVD.default_max_nnz
+    max_iter::Int = 4*max_nnz
+    rtol = KSVD.default_rtol
+    batch_size::Int = 1_000
+    CUDAAcceleratedMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
+end
+
 """ Original implementation by https://github.com/IshitaTakeshi/KSVD.jl.
 Useful for comparison and didactic purposes, but much much slower. """
 @kwdef struct LegacyMatchingPursuit <: SparseCodingMethod
@@ -110,7 +128,6 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
     end
     return X
 end
-
 
 @inbounds function matching_pursuit_(
         method::Union{MatchingPursuit, ParallelMatchingPursuit, GPUAcceleratedMatchingPursuit},
