@@ -25,6 +25,8 @@ import Random: TaskLocalRNG, seed!
         # That forces the first element to be positive, and makes the solution unique and let's us run the comparison.
         @testset for method in [
                 KSVD.OptimizedKSVD(shuffle_indices=false),
+                # KSVD.ParallelKSVD{true, T}(shuffle_indices=false),  These are not equivalent, as they do a sort of "full-batch" update.
+                # KSVD.ParallelKSVD{false, T}(shuffle_indices=false),
                 KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=false, batch_size_per_thread=1),
                 KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=false, batch_size_per_thread=1),
             ]
