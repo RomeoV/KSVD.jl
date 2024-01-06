@@ -116,30 +116,30 @@ function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y:
             ##<BEGIN OPTIMIZED BLOCK>
             ## Original:
             # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
-            ## Faster:
+            ## Optimized:
             E_Ω .= @view Y[:, ωₖ]
-            # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
+            # # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
             fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
             fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
             ## <END OPTIMIZED BLOCK>
 
             # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=100*eps(eltype(E_Ω))))
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*eps(eltype(E_Ω))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
         end
         D[:, index_batch] .= @view D_cpy[:, index_batch]
-        X[index_batch, :] .= X_cpy[index_batch, :]
-        ## THE NEXT OPTIMIZATION CAUSE OCCASIONAL ERRORS AND I DON'T KNOW WHY...
+        # # <BEGIN OPTIMIZED BLOCK>
+        # # Original:
+        # X[index_batch, :] .= X_cpy[index_batch, :]
+        # # Optimized:
+        # X[index_batch, :] .= X_cpy[index_batch, :]
         # we can exploit that the new nonzero indices don't change!
         # Note: This doesn't seem to help in the sparse copy above.
-        # row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
-        # Note: The next two lines are technically unnecessary, but sometimes the tests fail without them...
-        # Maybe weirdly connected to a race condition?
-        # row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
-        # @assert row_indices == row_indices_cpy
-        # nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+        row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+        # # <END OPTIMIZED BLOCK>
     end
     return D, X
 end
@@ -188,7 +188,7 @@ function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::A
             fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
 
             # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=100*eps(eltype(E_Ω))))
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*eps(eltype(E_Ω))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
@@ -207,7 +207,7 @@ function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::A
         D[:, index_batch] .= D_cpy[:, index_batch]
         # # <BEGIN OPTIMIZED BLOCK>.
         # # Original:
-        X[index_batch, :] .= X_cpy[index_batch, :]
+        # X[index_batch, :] .= X_cpy[index_batch, :]
         ## THE NEXT OPTIMIZATION CAUSE OCCASIONAL ERRORS AND I DON'T KNOW WHY...
         # # Optimized:
         # we can exploit that the new nonzero indices don't change!
