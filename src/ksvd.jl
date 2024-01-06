@@ -75,6 +75,7 @@ end
 
 sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]]..., size(Mt)...)
 @inbounds function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
+@inbounds function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
     @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
 
     N = size(Y, 2)
@@ -128,7 +129,7 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
     return D, X
 end
 
-@inbounds function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
+@inbounds function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
     @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
 
     N = size(Y, 2)
