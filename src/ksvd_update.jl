@@ -7,7 +7,6 @@ abstract type KSVDMethod end
 
 struct LegacyKSVD <: KSVDMethod end
 
-@deprecate OptimizedKSVD ParallelKSVD
 @kwdef struct OptimizedKSVD <: KSVDMethod
     shuffle_indices::Bool = false
 end
