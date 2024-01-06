@@ -130,15 +130,16 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
         end
         D[:, index_batch] .= @view D_cpy[:, index_batch]
-        # X[index_batch, :] .= X_cpy[index_batch, :]
+        X[index_batch, :] .= X_cpy[index_batch, :]
+        ## THE NEXT OPTIMIZATION CAUSE OCCASIONAL ERRORS AND I DON'T KNOW WHY...
         # we can exploit that the new nonzero indices don't change!
         # Note: This doesn't seem to help in the sparse copy above.
-        row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+        # row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
         # Note: The next two lines are technically unnecessary, but sometimes the tests fail without them...
         # Maybe weirdly connected to a race condition?
-        row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
-        @assert row_indices == row_indices_cpy
-        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+        # row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
+        # @assert row_indices == row_indices_cpy
+        # nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
     end
     return D, X
 end
@@ -206,7 +207,8 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
         D[:, index_batch] .= D_cpy[:, index_batch]
         # # <BEGIN OPTIMIZED BLOCK>.
         # # Original:
-        # X[index_batch, :] .= X_cpy[index_batch, :]
+        X[index_batch, :] .= X_cpy[index_batch, :]
+        ## THE NEXT OPTIMIZATION CAUSE OCCASIONAL ERRORS AND I DON'T KNOW WHY...
         # # Optimized:
         # we can exploit that the new nonzero indices don't change!
         # Note: This doesn't seem to help in the sparse copy above.
