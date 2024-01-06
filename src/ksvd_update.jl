@@ -120,8 +120,8 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
         row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
         # Note: The next two lines are technically unnecessary, but sometimes the tests fail without them...
         # Maybe weirdly connected to a race condition?
-        # row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
-        # @assert row_indices == row_indices_cpy
+        row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
+        @assert row_indices == row_indices_cpy
         nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
 
     end
@@ -180,8 +180,8 @@ end
         row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
         # Note: The next two lines are technically unnecessary, but sometimes the tests fail without them...
         # Maybe weirdly connected to a race condition?
-        #row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
-        #@assert row_indices == row_indices_cpy
+        row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
+        @assert row_indices == row_indices_cpy
         nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
         # # <END OPTIMIZED BLOCK>
     end
