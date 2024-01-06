@@ -226,7 +226,7 @@ end
 @inbounds function ksvd(method::OptimizedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T}
     N = size(Y, 2)
     Eₖ = Y - D * X
-    E_Ω_buffer = similar(Eₖ)
+    E_Ω_buffer = similar(Eₖ) .* false  # set to 0. Note that (.*0) doesn't work with NaN.
     basis_indices = (method.shuffle_indices ? shuffle(axes(X, 1)) : axes(X, 1))
     for k in basis_indices
         xₖ = @view X[k, :]
