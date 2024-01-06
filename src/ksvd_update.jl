@@ -84,7 +84,8 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
     E_Ω_buffers = method.E_Ω_bufs
 
     # We iterate over each basis vector, either in one big batch or many small batches,
-    # depending on the method.
+    # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
+    # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
     for index_batch in index_batches
         # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
@@ -134,7 +135,8 @@ end
     E_Ω_buffers = method.E_Ω_bufs
 
     # We iterate over each basis vector, either in one big batch or many small batches,
-    # depending on the method.
+    # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
+    # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
     for index_batch in index_batches
         # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
