@@ -37,6 +37,14 @@ is_initialized(method::KSVDMethod)::Bool = true
 is_initialized(method::Union{ParallelKSVD, BatchedParallelKSVD})::Bool =
     length(method.E_buf) > 0 && length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
 
+"""
+    ksvd(method::LegacyKSVD, Y, D, X)
+
+This is the original serial implementation written by Ishita Takeshi, mostly used as a reference for testing, and
+for didactic reasons since the algorithm is the most clear here.
+
+However, it is recommended to use `BatchedParallelKSVD`.
+"""
 function ksvd(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     for k in 1:size(X, 1)
@@ -63,20 +71,27 @@ function ksvd(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::Abstr
     return D, X
 end
 
-" Just yields one big batch in the 'regular' case. "
-function make_index_batches(method::ParallelKSVD, axis)
-    basis_indices = (method.shuffle_indices ? shuffle(axis) : axis)
+"Just yields indices as one big batch in the 'regular' case. May shuffle, depending on ksvd method parameter."
+function make_index_batches(method::ParallelKSVD, indices)
+    basis_indices = (method.shuffle_indices ? shuffle(indices) : indices)
     return [basis_indices]
 end
-" Yields batches with one element per thread. "
-function make_index_batches(method::BatchedParallelKSVD, axis)
-    basis_indices = (method.shuffle_indices ? shuffle(axis) : axis)
+"Yields indices in batches with one element per thread. May shuffle before batching, depending on ksvd method parameter."
+function make_index_batches(method::BatchedParallelKSVD, indices)
+    basis_indices = (method.shuffle_indices ? shuffle(indices) : indices)
     return Iterators.partition(basis_indices, method.batch_size_per_thread*Threads.nthreads())
 end
 
-sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]]..., size(Mt)...)
-@inbounds function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
-@inbounds function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
+"""
+    ksvd(method::ParallelKSVD{false}, Y, D, X)
+    ksvd(method::BatchedParallelKSVD{false}, Y, D, X)
+
+Parallel KSVD method without preallocation.
+In this implementation, the computation `E = Y - D*X` is not precomputed, but instead fused into the
+later computation ` E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]`.
+This can often be faster for large data sizes, and is also easier to parallelize.
+"""
+function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
     @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
 
     N = size(Y, 2)
@@ -89,7 +104,7 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
-    for index_batch in index_batches
+    @inbounds for index_batch in index_batches
         # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
         Threads.@threads :static for k in index_batch
             xₖ = X[k, :]
@@ -125,12 +140,22 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
         row_indices_cpy = SparseArrays.rowvals(X_cpy) .∈ [index_batch]
         @assert row_indices == row_indices_cpy
         nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
-
     end
     return D, X
 end
 
-@inbounds function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
+"""
+    ksvd(method::ParallelKSVD{true}, Y, D, X)
+    ksvd(method::BatchedParallelKSVD{true}, Y, D, X)
+
+Parallel KSVD method with preallocation.
+In this implementation, the computation `E = Y - D*X` is precomputed and a preallocated buffer is used.
+Note that this uses a major part of the computation time, and any speedup is worth a lot.
+For this reason, we use a specialized parallel implementation provided in the `ThreadedDenseSparseMul.jl` package.
+The result of this precomputation can later be used in the computation ` E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]`.
+by only having to compute the last part, and "resetting it" after using the result.
+"""
+function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
     @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
 
     N = size(Y, 2)
@@ -148,7 +173,7 @@ end
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
-    for index_batch in index_batches
+    @inbounds for index_batch in index_batches
         # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
         Threads.@threads :static for k in index_batch
             xₖ = X[k, :]
@@ -169,9 +194,16 @@ end
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
         end
 
+        # We undo the operations in the lines above to leave the error buffer "unmodified".
+        # # <BEGIN OPTIMIZED BLOCK>.
+        # # Original:
         # E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
+        # # Optimized:
         fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
         fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
+        ##<END OPTIMIZED BLOCK>
+
+        # Finally, we copy over the results.
         D[:, index_batch] .= D_cpy[:, index_batch]
         # # <BEGIN OPTIMIZED BLOCK>.
         # # Original:
