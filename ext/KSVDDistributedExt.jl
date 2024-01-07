@@ -20,7 +20,7 @@ function KSVD.ksvd(method::DistributedKSVD, Y::AbstractMatrix{T}, D::AbstractMat
     reducer_fn(tpls...) = begin
         Ds, Xs = [getindex.(tpls, i) for i ∈ 1:2]
         D = sum(Ds)/length(Ds); normalize!.(eachcol(D))
-        X = hcat(Xs...)
+        X = reduce(hcat, Xs)  # use `reduce` version to make type stable.
         (D, X)
     end
     index_batches = make_index_batches(method, axes(Y, 2)) |> collect
