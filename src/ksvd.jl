@@ -26,6 +26,12 @@ end
     batch_size_per_thread::Int = 1
 end
 
+@kwdef mutable struct DistributedKSVD{T} <: KSVDMethod
+    submethod_per_worker::Dict{Int, <:KSVDMethod} = Dict()
+    shuffle_indices::Bool = false
+    batch_size_per_thread::Int = 1
+end
+
 maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
 function maybe_init_buffers!(method::Union{ParallelKSVD{I, T}, BatchedParallelKSVD{I, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {I, T<:Real}
     method.E_buf=Matrix{T}(undef, emb_dim, n_samples)
