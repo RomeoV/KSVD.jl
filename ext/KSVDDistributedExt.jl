@@ -8,7 +8,7 @@ function KSVD.make_index_batches(method::DistributedKSVD, indices)
     return Iterators.partition(basis_indices, length(basis_indices)÷nworkers())
 end
 
-function KSVD.ksvd(method::DistributedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
+function KSVD.ksvd_update(method::DistributedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
     # the revised plan:
     # Let's assume we already do a good job for moderately sized datasets.
     # Now, we may have a very large number of datapoints.
