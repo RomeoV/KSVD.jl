@@ -7,11 +7,23 @@ This package implements:
 * K-SVD as described in the original paper: [K-SVD: An Algorithm for Designing Overcomplete Dictionaries for Sparse Representation](http://www.cs.technion.ac.il/~freddy/papers/120.pdf)
 * [Matching Pursuit](https://en.wikipedia.org/wiki/Matching_pursuit) for representing signals using a given dictionary.
 
+In particular, substantial effort has been put in speeding up this implementation.
+This includes:
+- Custom parallel dense-sparse matrix multiplication via [`ThreadedDenseSparseMul.jl`](https://github.com/RomeoV/ThreadedDenseSparseMul.jl)
+- Custom pipelined GPU offloading for matching pursuit (`CUDAAcceleratedMatchingPursuit`)
+- Threaded matching pursuit (`ParallelMatchingPursuit`) (mostly "embarassingly parallel")
+- Threaded ksvd implementation (`ParallelKSVD`) (*not* "embarassingly parallel")
+- Threaded and batched ksvd implementation (`BatchedParallelKSVD`) (*not* "embarassingly parallel")
+- Extensive efforts removing allocations by preallocating buffers
+- Extensive benchmark-driven optimizations utilizing [`ProfileView.jl`](https://github.com/timholy/ProfileView.jl)
+- Many other modification experiments.
+
 # Installation
-Launch Julia and type
+Package registration is WIP (https://github.com/JuliaRegistries/General/pull/98593).
+Until then, you can add this package like so:
 
 ```julia
-Pkg.add("KSVD")
+] add https://github.com/RomeoV/KSVD.jl
 ```
 
 # Usage
@@ -21,30 +33,23 @@ D is a dictionary. Each column of D represents an atom.
 K-SVD derives D and X such that DX ≈ Y from only Y.  
 
 ```julia
-D, X = ksvd(
-    Y,
-    256,  # the number of atoms in D
-    max_iter = 200,  # max iterations of K-SVD
-    max_iter_mp = 40,  # max iterations of matching pursuit called in K-SVD
-    sparsity_allowance = 0.96  # stop iteration when more than 96% of elements in X become zeros
-)
+D, X = dictionary_learning(Y, 256)
+
+# we can control the matching pursuit stage and ksvd stage through method structs
+ksvd_method = BatchedParallelKSVD()
+mp_Method = ParallelMatchingPursuit()
+D, X = dictionary_learning(Y, 256;
+                           ksvd_method=ksvd_method,
+                           sparse_coding_method=mp_method)
+```
+
+Of course we can also just run one step of matching pursuit/sparse coding, or one step of the ksvd update:
+
+``` julia
+basis = KSVD.init_dictionary(size(Y, 1), 2*size(Y,2))
+X::SparseMatrix = KSVD.sparse_coding(mp_method, Y, basis
+
+D::Matrix, X::SparseMatrix = KSVD.ksvd(ksvd_method, Y, basis, X)
 ```
 
 [Matching Pursuit](https://en.wikipedia.org/wiki/Matching_pursuit) derives X from D and Y such that DX = Y in constraint that X be as sparse as possible.
-
-```julia
-X_sparse = matching_pursuit(Y, D, max_iter = 200)
-```
-
-# Example
-Samples of [the digits dataset in scikit-learn ](http://scikit-learn.org/stable/auto_examples/datasets/plot_digits_last_image.html) and the obtained dictionary of 256 atoms.
-
-![images](examples/digit_images.png)
-![digits256](examples/digits256.png)
-
-See [examples](examples) for more details.
-
-# Provided functions
-
-Only a few functions are provided: `ksvd` and `matching_pursuit`.
-See [the documentation](docs/build/index.md).
