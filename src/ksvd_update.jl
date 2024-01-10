@@ -30,6 +30,7 @@ end
     submethod_per_worker::Dict{Int, <:KSVDMethod} = Dict()
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
+    reduction_method::Symbol = :clustering  # or :mean
 end
 
 maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
@@ -38,7 +39,6 @@ function maybe_init_buffers!(method::Union{ParallelKSVD{I, T}, BatchedParallelKS
     method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
-is_initialized(method::KSVDMethod)::Bool = true
 is_initialized(method::Union{ParallelKSVD, BatchedParallelKSVD})::Bool =
     length(method.E_buf) > 0 && length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
 
@@ -96,14 +96,19 @@ In this implementation, the computation `E = Y - D*X` is not precomputed, but in
 later computation ` E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]`.
 This can often be faster for large data sizes, and is also easier to parallelize.
 """
-function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
-    @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
+                     reinitialize_buffers::Bool=false) where T
+    if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+        KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
+    end
 
     N = size(Y, 2)
     X_cpy = copy(X)
     D_cpy = method.D_cpy_buf
+    # D_cpy = zeros(size(D))
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
+    # E_Ω_buffers = [zeros(size(Y)) for _ in 1:Threads.nthreads()]
 
     # We iterate over each basis vector, either in one big batch or many small batches,
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
@@ -160,8 +165,11 @@ For this reason, we use a specialized parallel implementation provided in the `T
 The result of this precomputation can later be used in the computation ` E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]`.
 by only having to compute the last part, and "resetting it" after using the result.
 """
-function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where T
-    @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
+                     reinitialize_buffers::Bool=false) where T
+    if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+        KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
+    end
 
     N = size(Y, 2)
     E = method.E_buf
