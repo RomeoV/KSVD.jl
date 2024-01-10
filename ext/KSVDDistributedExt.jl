@@ -2,7 +2,7 @@ module KSVDDistributedExt
 using Distributed
 using KSVD
 using LinearAlgebra: normalize!
-import KSVD: DistributedKSVD, make_index_batches, ksvd
+import KSVD: DistributedKSVD
 function KSVD.make_index_batches(method::DistributedKSVD, indices)
     basis_indices = (method.shuffle_indices ? shuffle(indices) : indices)
     return Iterators.partition(basis_indices, length(basis_indices)÷nworkers())
