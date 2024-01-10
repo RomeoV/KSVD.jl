@@ -17,7 +17,7 @@ suite[:sparse_coding] = BenchmarkGroup([],Dict(
     for method in [KSVD.MatchingPursuit(), KSVD.ParallelMatchingPursuit(), KSVD.CUDAAcceleratedMatchingPursuit()]))
 suite[:basis_improvement] = BenchmarkGroup([], Dict(
     string(method_t)=>BenchmarkGroup([], Dict(
-        N => try; @benchmarkable KSVD.ksvd(method, data, dictionary, X) setup=begin
+        N => try; @benchmarkable KSVD.ksvd_update(method, data, dictionary, X) setup=begin
             tpl = generate_benchmark_data($N, $E, $K, $avg_nnz_per_sample)
             data = tpl.data
             dictionary = KSVD.init_dictionary($E, $K)

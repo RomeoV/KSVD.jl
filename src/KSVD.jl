@@ -10,7 +10,7 @@ module KSVD
 # If you try to read the code, I recommend you to see Figure 2 first.
 #
 
-export dictionary_learning, matching_pursuit
+export dictionary_learning, matching_pursuit, ksvd_update
 export LegacyKSVD, OptimizedKSVD, ParallelKSVD, ParallelBatchedKSVD
 export LegacyMatchingPursuit, ParallelMatchingPursuit
 
@@ -26,7 +26,7 @@ using TimerOutputs
 
 include("util.jl")
 include("matching_pursuit.jl")
-include("ksvd.jl")
+include("ksvd_update.jl")
 
 """
     dictionary_learning(
@@ -79,7 +79,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
         @timeit to "Sparse coding" X = sparse_coding(sparse_coding_method, Y, D)
         trace_convergence && (D_last .= copy(D))
         verbose && @info "Starting svd"
-        @timeit to "KSVD" D, X = ksvd(ksvd_method, Y, D, X)
+        @timeit to "KSVD" D, X = ksvd_update(ksvd_method, Y, D, X)
         trace_convergence && @info norm(Y - D*X)
 
         # return if the number of zero entries are <= max_n_zeros

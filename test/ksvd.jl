@@ -16,7 +16,7 @@ import Random: TaskLocalRNG, seed!
         D = KSVD.init_dictionary(rng, T, E, 2*E)
         X = sprand(rng, T, 2*E, N, 0.1)
 
-        D_baseline, X_baseline = KSVD.ksvd(KSVD.LegacyKSVD(), data, copy(D), copy(X))
+        D_baseline, X_baseline = ksvd_update(KSVD.LegacyKSVD(), data, copy(D), copy(X))
         @test all(≈(1.), norm.(eachcol(D_baseline)))
         @test eltype(D_baseline) == eltype(X_baseline) == T
 
@@ -29,7 +29,7 @@ import Random: TaskLocalRNG, seed!
                 KSVD.BatchedParallelKSVD{false, Float64}(shuffle_indices=false, batch_size_per_thread=1),
             ]
             KSVD.maybe_init_buffers!(method, E, 2*E, N)
-            D_res, X_res = KSVD.ksvd(method, data, copy(D), copy(X))
+            D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
             @test D_res ≈ D_baseline rtol=10*sqrt(eps(T))
             @test X_res ≈ X_baseline rtol=10*sqrt(eps(T))
@@ -46,7 +46,7 @@ import Random: TaskLocalRNG, seed!
                 KSVD.ParallelKSVD{true, Float64}(shuffle_indices=false),
             ]
             KSVD.maybe_init_buffers!(method, E, 2*E, N)
-            D_res, X_res = KSVD.ksvd(method, data, copy(D), copy(X))
+            D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
             @test D_res ≈ D_baseline rtol=10*sqrt(eps(T)) skip=true;
             @test X_res ≈ X_baseline rtol=10*sqrt(eps(T)) skip=true;

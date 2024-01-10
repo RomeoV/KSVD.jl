@@ -1,6 +1,6 @@
 import Random: shuffle
 
-ksvd(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd(OptimizedKSVD(), Y, D, X)
+ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_update(OptimizedKSVD(), Y, D, X)
 
 abstract type KSVDMethod end
 
@@ -35,7 +35,7 @@ is_initialized(method::KSVDMethod)::Bool = true
 is_initialized(method::Union{ParallelKSVD, BatchedParallelKSVD})::Bool =
     length(method.E_buf) > 0 && length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
 
-function ksvd(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+function ksvd_update(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
     N = size(Y, 2)
     for k in 1:size(X, 1)
         xₖ = X[k, :]
@@ -73,7 +73,7 @@ function make_index_batches(method::BatchedParallelKSVD, axis)
 end
 
 sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]]..., size(Mt)...)
-@inbounds function ksvd(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
+@inbounds function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
     @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
 
     N = size(Y, 2)
@@ -112,7 +112,7 @@ sparsecsr(M_t::Adjoint{SparseMatrixCSC}) = sparsecsr(findnz(parent(M_t))[[2,1,3]
     return D, X
 end
 
-@inbounds function ksvd(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
+@inbounds function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; svd_method=svd!) where T
     @assert is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
 
     N = size(Y, 2)
@@ -154,7 +154,7 @@ end
     return D, X
 end
 
-@inbounds function ksvd(method::OptimizedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T}
+@inbounds function ksvd_update(method::OptimizedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}) where {T}
     N = size(Y, 2)
     Eₖ = Y - D * X
     E_Ω_buffer = similar(Eₖ)

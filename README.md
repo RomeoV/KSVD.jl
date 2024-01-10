@@ -47,9 +47,9 @@ Of course we can also just run one step of matching pursuit/sparse coding, or on
 
 ``` julia
 basis = KSVD.init_dictionary(size(Y, 1), 2*size(Y,2))
-X::SparseMatrix = KSVD.sparse_coding(mp_method, Y, basis
+X::SparseMatrix = sparse_coding(mp_method, Y, basis
 
-D::Matrix, X::SparseMatrix = KSVD.ksvd(ksvd_method, Y, basis, X)
+D::Matrix, X::SparseMatrix = ksvd_update(ksvd_method, Y, basis, X)
 ```
 
 [Matching Pursuit](https://en.wikipedia.org/wiki/Matching_pursuit) derives X from D and Y such that DX = Y in constraint that X be as sparse as possible.

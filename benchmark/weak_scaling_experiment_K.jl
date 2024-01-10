@@ -16,7 +16,7 @@ K = K_per_proc * N_procs
 if length(ARGS) > 0 && ARGS[1] == "DRY"
     bres = @benchmark rand(100, 100)\rand(100) samples=7
 else
-    bres = @benchmark ksvd($data[1:K, 1:10_000], K, max_iter=1,
+    bres = @benchmark dictionary_learning($data[1:K, 1:10_000], K, max_iter=1,
                            ksvd_method=KSVD.ParallelKSVD(),
                            sparse_coding_method=KSVD.ParallelMatchingPursuit()) samples=2
 end
