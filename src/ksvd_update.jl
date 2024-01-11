@@ -1,5 +1,6 @@
 import Random: shuffle
 import SparseArrays: nzvalview
+import DistributedArrays: localpart  # we need this in case the buffers are DistributedArrays (DArrays)
 
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_update(OptimizedKSVD(), Y, D, X)
 
@@ -12,16 +13,16 @@ struct LegacyKSVD <: KSVDMethod end
 end
 
 @kwdef mutable struct ParallelKSVD{precompute_error, T} <: KSVDMethod
-    E_buf::Matrix{T} = T[;;]
-    E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
-    D_cpy_buf::Matrix{T} = T[;;]
+    E_buf::AbstractMatrix{T} = T[;;]
+    E_Ω_bufs::Vector{AbstractMatrix{T}} = Matrix{T}[]
+    D_cpy_buf::AbstractMatrix{T} = T[;;]
     shuffle_indices::Bool = false
 end
 
 @kwdef mutable struct BatchedParallelKSVD{precompute_error, T} <: KSVDMethod
-    E_buf::Matrix{T} = T[;;]
-    E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
-    D_cpy_buf::Matrix{T} = T[;;]
+    E_buf::AbstractMatrix{T} = T[;;]
+    E_Ω_bufs::Vector{AbstractMatrix{T}} = Matrix{T}[]
+    D_cpy_buf::AbstractMatrix{T} = T[;;]
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
 end
@@ -34,12 +35,18 @@ end
 end
 
 maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
-function maybe_init_buffers!(method::Union{ParallelKSVD{I, T}, BatchedParallelKSVD{I, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {I, T<:Real}
+function maybe_init_buffers!(method::Union{ParallelKSVD{false, T}, BatchedParallelKSVD{false, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {T<:Real}
+    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
+    method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
+end
+function maybe_init_buffers!(method::Union{ParallelKSVD{true, T}, BatchedParallelKSVD{true, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {T<:Real}
     method.E_buf=Matrix{T}(undef, emb_dim, n_samples)
     method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
-is_initialized(method::Union{ParallelKSVD, BatchedParallelKSVD})::Bool =
+is_initialized(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}})::Bool =
+    length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
+is_initialized(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}})::Bool =
     length(method.E_buf) > 0 && length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
 
 """
@@ -104,7 +111,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
 
     N = size(Y, 2)
     X_cpy = copy(X)
-    D_cpy = method.D_cpy_buf
+    D_cpy = localpart(method.D_cpy_buf)  # localpart needed if distibuted
     # D_cpy = zeros(size(D))
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
@@ -120,7 +127,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
             xₖ = X[k, :]
             all(iszero, xₖ) && continue
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = E_Ω_buffers[Threads.threadid()]  # See :static note above.
+            E_Ω = let buf = localpart(E_Ω_buffers[Threads.threadid()])  # See :static note above.
                 @view buf[:, 1:length(ωₖ)]
             end
 
@@ -172,13 +179,13 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     end
 
     N = size(Y, 2)
-    E = method.E_buf
+    E = localpart(method.E_buf)  # localpart is needed if distributed
     # E = Y - D*X
     E .= Y
     fastdensesparsemul_threaded!(E, D, X, -1, 1)
 
     X_cpy = copy(X)
-    D_cpy = method.D_cpy_buf
+    D_cpy = localpart(method.D_cpy_buf)
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
 
@@ -192,7 +199,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
             xₖ = X[k, :]
             all(iszero, xₖ) && continue
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = E_Ω_buffers[Threads.threadid()]  # See :static note above.
+            E_Ω = let buf = localpart(E_Ω_buffers[Threads.threadid()])  # See :static note above.
                 @view buf[:, 1:length(ωₖ)]
             end
 
