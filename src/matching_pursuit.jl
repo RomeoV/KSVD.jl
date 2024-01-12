@@ -137,7 +137,7 @@ end
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
-    xdict = DefaultDict{Int, T}(0.)
+    xdict = DefaultDict{Int, T}(zero(T))
     norm_data = norm(data)
 
     products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
@@ -165,8 +165,18 @@ end
 
         xdict[maxindex] += a
     end
-    return sparsevec(xdict, n_atoms)
+    inds, vals = collect(keys(xdict)), collect(values(xdict))
+    if false # !isnothing(method.regularize_results_factor)
+        # abuse products_abs buffer
+        buf = let products_abs = reshape(products_abs, size(dictionary, 1), :)
+            @view products_abs[:, 1:length(inds)]
+        end
+        buf .= dictionary[:, inds]
+        vals = (buf'*buf + 0.1*I)*buf'*data  # ridge regression
+    end
+    return sparsevec(inds, vals)
 end
+
 " This is the original implementation by https://github.com/IshitaTakeshi, useful for
 numerical comparison and didactic purposes. "
 function sparse_coding(method::LegacyMatchingPursuit,
@@ -195,7 +205,7 @@ function matching_pursuit_(method::LegacyMatchingPursuit,
     residual = copy(data)
     norm_data = norm(data)
 
-    xdict = DefaultDict{Int, T}(0.)
+    xdict = DefaultDict{Int, T}(zero(T))
     for i in 1:max_iter
         if norm(residual)/norm_data < rtol
             return sparsevec(xdict, n_atoms)
