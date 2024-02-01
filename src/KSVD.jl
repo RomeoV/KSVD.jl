@@ -40,6 +40,8 @@ include("ksvd_update.jl")
 Run K-SVD that designs an efficient dictionary D for sparse representations,
 and returns X such that DX = Y or DX ≈ Y.
 
+Y is expected to be `(num_features x num_samples)`.
+
 ```
 # Arguments
 * `sparsity_allowance`: Stop iteration if the number of zeros in X / the number
@@ -50,7 +52,7 @@ and returns X such that DX = Y or DX ≈ Y.
 ```
 """
 function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
-                             sparsity_allowance = 0.1,
+                             sparsity_allowance = 1.0,
                              ksvd_method = OptimizedKSVD(),
                              sparse_coding_method = MatchingPursuit(),
                              max_iter::Int = 10,
@@ -74,7 +76,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     @assert all(≈(1.0), norm.(eachcol(D)))
 
     p = Progress(max_iter)
-    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=min(100*sparse_coding_method.max_nnz/K, 1))
+    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=1.0)
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
