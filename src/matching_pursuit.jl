@@ -165,24 +165,52 @@ end
         products_abs .= abs.(products)
         _, maxindex = findmax_fast(products_abs)
 
-        a = products[maxindex]
+        beta = 1/(1 - v_k'*b_k)
+        v_k = DtD[inds, maxindex]
+        b_k = A_inv*v_k
+        A_inv = [A_inv -beta*b_k;
+                 -beta*b_k' 1]
+
         atom = @view dictionary[:, maxindex]
-        @assert norm(atom) ≈ 1. norm(atom)
+        γ_k = atom - dictionary[:, inds] * b_k
+        α_k = inv(sum(abs2, γ_k)) * products[maxindex]
+        factors .-= α_k*b_k
+        products .-= α_k .* @view DtD[:, maxindex]
 
-        xdict[maxindex] += a
+        push!(inds, maxindex)
+        push!(factors, α_k)
 
-        inds = keys(xdict)
-        buf = dictionary[:, collect(inds)]
-        factors = pinv(buf) * data
-        reconstruction = buf * factors
-        residual .= data - reconstruction
-        products .= dictionary' * residual
-        for (i, f) in zip(inds, factors)
-            xdict[i] = f
-        end
+        reconstruction .+= α_k * atom
+        residual .-= α_k * atom
     end
+    xdict = Dict(zip(inds, factors))
     return sparsevec(xdict, n_atoms)
 end
+
+
+"""
+Optimization rationale:
+For any given residual, we compute `products = dictionary' * residual` and find the maximizer over the dictionary elements of this.
+We then assign `residual -= (d_i' * residual) * d_i`
+
+
+```
+products = dictionary' * residual
+_, maxindex = findmax(abs.(products))
+maxval = products[maxindex]
+atom = dictionary[:, maxindex]
+
+a = maxval / sum(abs2, atom)  # equivalent to maxval / norm(atom)^2
+residual -= atom * a
+```
+
+Then the new products become
+```
+a = max(abs.(products[t]))
+products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
+              = products[t] - (dictionary' * dictionary[idx] * a)
+```
+"""
 
 @inbounds function matching_pursuit_(
         method::Union{MatchingPursuit, ParallelMatchingPursuit, GPUAcceleratedMatchingPursuit},
