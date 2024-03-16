@@ -29,6 +29,15 @@ may use too much memory, e.g. if the data is too large to fit into memory (see `
     precompute_products=true
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
+@kwdef struct OrthogonalMatchingPursuit <: SparseCodingMethod
+    max_nnz::Int = default_max_nnz
+    max_iter::Int = 4*max_nnz
+    rtol = default_rtol
+    precompute_products=true
+    OrthogonalMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
+end
+
+
 """ Multithreaded version of `MatchingPursuit`.
 Essentially falls back to single-threaded version automatically if julia is launched with
 only one thread.
@@ -127,6 +136,52 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, 
         sparse(I, J, V, K, N)
     end
     return X
+end
+
+@inbounds function matching_pursuit_(
+        method::Union{OrthogonalMatchingPursuit},
+        data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
+        products_init::Union{Nothing, AbstractVector{T}}=nothing) :: SparseVector{T, Int} where T
+    (; max_nnz, max_iter, rtol) = method
+
+    n_atoms = size(dictionary, 2)
+    residual = copy(data)
+    xdict = DefaultDict{Int, T}(zero(T))
+    norm_data = norm(data)
+
+    products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
+    products_abs = abs.(products)  # prealloc
+
+    for i in 1:max_iter
+        if norm(residual)/norm_data < rtol
+            return sparsevec(xdict, n_atoms)
+        end
+        if length(xdict) > max_nnz
+            pop!(xdict, findmin(abs, xdict)[2])
+            return sparsevec(xdict, n_atoms)
+        end
+
+        # find an atom with maximum inner product
+        products_abs .= abs.(products)
+        _, maxindex = findmax_fast(products_abs)
+
+        a = products[maxindex]
+        atom = @view dictionary[:, maxindex]
+        @assert norm(atom) ≈ 1. norm(atom)
+
+        xdict[maxindex] += a
+
+        inds = keys(xdict)
+        buf = dictionary[:, collect(inds)]
+        factors = pinv(buf) * data
+        reconstruction = buf * factors
+        residual .= data - reconstruction
+        products .= dictionary' * residual
+        for (i, f) in zip(inds, factors)
+            xdict[i] = f
+        end
+    end
+    return sparsevec(xdict, n_atoms)
 end
 
 @inbounds function matching_pursuit_(
