@@ -29,6 +29,7 @@ may use too much memory, e.g. if the data is too large to fit into memory (see `
     precompute_products=true
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
+
 @kwdef struct OrthogonalMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
     max_iter::Int = 4*max_nnz
@@ -253,16 +254,7 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 
         xdict[maxindex] += a
     end
-    inds, vals = collect(keys(xdict)), collect(values(xdict))
-    if false # !isnothing(method.regularize_results_factor)
-        # abuse products_abs buffer
-        buf = let products_abs = reshape(products_abs, size(dictionary, 1), :)
-            @view products_abs[:, 1:length(inds)]
-        end
-        buf .= dictionary[:, inds]
-        vals = (buf'*buf + 0.1*I)*buf'*data  # ridge regression
-    end
-    return sparsevec(inds, vals)
+    return sparsevec(xdict, n_atoms)
 end
 
 " This is the original implementation by https://github.com/IshitaTakeshi, useful for
