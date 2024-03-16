@@ -151,19 +151,24 @@ end
 
     products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
     products_abs = abs.(products)  # prealloc
+    A_inv = zeros(T, 0, 0)
+    inds = Int[]
+    factors = T[]
+    b_k = zeros(T, 0)
+    v_k = zeros(T, 0)
+    reconstruction = zeros(T, size(data))
 
-    for i in 1:max_iter
+    # will mask out "used indices" when finding next basis vector
+    mask = ones(Bool, size(products))
+
+    for i in 1:max_nnz
         if norm(residual)/norm_data < rtol
-            return sparsevec(xdict, n_atoms)
-        end
-        if length(xdict) > max_nnz
-            pop!(xdict, findmin(abs, xdict)[2])
-            return sparsevec(xdict, n_atoms)
+            return SparseArrays.sparsevec(inds, factors, n_atoms)
         end
 
         # find an atom with maximum inner product
         products_abs .= abs.(products)
-        _, maxindex = findmax_fast(products_abs)
+        _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
 
         beta = 1/(1 - v_k'*b_k)
         v_k = DtD[inds, maxindex]
@@ -179,12 +184,12 @@ end
 
         push!(inds, maxindex)
         push!(factors, α_k)
+        mask[maxindex] = false
 
         reconstruction .+= α_k * atom
         residual .-= α_k * atom
     end
-    xdict = Dict(zip(inds, factors))
-    return sparsevec(xdict, n_atoms)
+    return SparseArrays.sparsevec(inds, factors, n_atoms)
 end
 
 
