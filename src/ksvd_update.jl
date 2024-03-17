@@ -38,20 +38,15 @@ BatchedParallelKSVD{precompute_error, T}(; kwargs...) where {precompute_error, T
 end
 
 maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
-function maybe_init_buffers!(method::ParallelKSVD{precompute_error, T}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {precompute_error, T<:Real}
+function maybe_init_buffers!(method::Union{ParallelKSVD{precompute_error, T}, BatchedParallelKSVD{precompute_error, T}},
+                             emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {precompute_error, T<:Real}
     precompute_error && (method.E_buf=Matrix{T}(undef, emb_dim, n_samples);)
-    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
+    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:nchunks(method)]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
-function maybe_init_buffers!(method::BatchedParallelKSVD{precompute_error, T}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {precompute_error, T<:Real}
-    precompute_error && (method.E_buf=Matrix{T}(undef, emb_dim, n_samples);)
-    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:(method.batch_size_per_thread*Threads.nthreads())]
-    method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
+function is_initialized(method::Union{ParallelKSVD{precompute_error}, BatchedParallelKSVD{precompute_error}})::Bool where {precompute_error}
+    (length(method.E_Ω_bufs) > 0) && (length(method.D_cpy_buf) > 0) && (!precompute_error || length(method.D_cpy_buf) > 0)
 end
-is_initialized(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}})::Bool =
-    length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
-is_initialized(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}})::Bool =
-    length(method.E_buf) > 0 && length(method.E_Ω_bufs) > 0 && length(method.D_cpy_buf) > 0
 
 """
     ksvd_update(method::LegacyKSVD, Y, D, X)
@@ -98,19 +93,9 @@ function make_index_batches(method::BatchedParallelKSVD, indices)
     return Iterators.partition(basis_indices, method.batch_size_per_thread*Threads.nthreads())
 end
 
-"""
-We have to consider two cases.
-If we go "full batch", we can not allocate a buffer for each task. Instead, we allocate a buffer for each thread,
-but then have to pin tasks to threads (i.e. static scheduling).
-Otherwise, if we go "small batch", we can allocate a buffer for each task in the batch and then index accordinly, using dynamic scheduling.
-I have yet to investigate how dynamic scheduling impacts performance.
-"""
-get_buf_idx(::Type{OhMyThreads.StaticScheduler}, batch_buf_idx) = Threads.threadid()
-get_buf_idx(::Type{OhMyThreads.DynamicScheduler}, batch_buf_idx) = batch_buf_idx
-get_buf_idx(method::KSVDMethod, batch_buf_idx) = get_buf_idx(get_scheduler_t(method), batch_buf_idx)
 get_scheduler_t(::ParallelKSVD) = OhMyThreads.StaticScheduler
 get_scheduler_t(::BatchedParallelKSVD{pce, T, Scheduler}) where {pce, T, Scheduler<:OhMyThreads.Scheduler} = Scheduler
-
+nchunks(method::KSVDMethod) = Threads.nthreads()
 
 """
     ksvd_update(method::ParallelKSVD{false}, Y, D, X)
@@ -147,7 +132,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
             xₖ = X[k, :]
             all(iszero, xₖ) && (D_copy[:, k] .= D[:, k]; return)
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = E_Ω_buffers[get_buf_idx(method, buf_idx)]
+            E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
             end
 
