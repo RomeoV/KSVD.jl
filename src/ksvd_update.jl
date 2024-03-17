@@ -36,12 +36,12 @@ end
 
 maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
 function maybe_init_buffers!(method::Union{ParallelKSVD{false, T}, BatchedParallelKSVD{false, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {T<:Real}
-    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
+    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:(method.batch_size_per_thread*Threads.nthreads())]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
 function maybe_init_buffers!(method::Union{ParallelKSVD{true, T}, BatchedParallelKSVD{true, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {T<:Real}
     method.E_buf=Matrix{T}(undef, emb_dim, n_samples)
-    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
+    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:(method.batch_size_per_thread*Threads.nthreads())]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
 is_initialized(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}})::Bool =
@@ -94,6 +94,9 @@ function make_index_batches(method::BatchedParallelKSVD, indices)
     return Iterators.partition(basis_indices, method.batch_size_per_thread*Threads.nthreads())
 end
 
+"Helper for `@threads for (i, idx) in enumerate(indices)` use case."
+const cenumerate = collect ∘ enumerate
+
 """
     ksvd_update(method::ParallelKSVD{false}, Y, D, X)
     ksvd_update(method::BatchedParallelKSVD{false}, Y, D, X)
@@ -123,12 +126,11 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
     @inbounds for index_batch in index_batches
-        # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
-        Threads.@threads :static for k in index_batch
+        Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
             xₖ = X[k, :]
             all(iszero, xₖ) && continue
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = localpart(E_Ω_buffers[Threads.threadid()])  # See :static note above.
+            E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
             end
 
@@ -196,12 +198,11 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
     @inbounds for index_batch in index_batches
-        # Note: we need :static to use threadid, see https://julialang.org/blog/2023/07/PSA-dont-use-threadid/
-        Threads.@threads :static for k in index_batch
+        Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
             xₖ = X[k, :]
             all(iszero, xₖ) && continue
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = localpart(E_Ω_buffers[Threads.threadid()])  # See :static note above.
+            E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
             end
 
