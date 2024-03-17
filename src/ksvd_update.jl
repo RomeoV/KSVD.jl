@@ -1,6 +1,8 @@
 import Random: shuffle
 import SparseArrays: nzvalview
 import DistributedArrays: localpart  # we need this in case the buffers are DistributedArrays (DArrays)
+import OhMyThreads
+import OhMyThreads: tforeach
 
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_update(OptimizedKSVD(), Y, D, X)
 
@@ -19,13 +21,14 @@ end
     shuffle_indices::Bool = false
 end
 
-@kwdef mutable struct BatchedParallelKSVD{precompute_error, T} <: KSVDMethod
+@kwdef mutable struct BatchedParallelKSVD{precompute_error, T, Scheduler<:OhMyThreads.Scheduler} <: KSVDMethod
     E_buf::AbstractMatrix{T} = T[;;]
     E_Ω_bufs::Vector{AbstractMatrix{T}} = Matrix{T}[]
     D_cpy_buf::AbstractMatrix{T} = T[;;]
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
 end
+BatchedParallelKSVD{precompute_error, T}(; kwargs...) where {precompute_error, T} = BatchedParallelKSVD{precompute_error, T, OhMyThreads.Schedulers.DynamicScheduler}(; kwargs...)
 
 @kwdef mutable struct DistributedKSVD{T} <: KSVDMethod
     submethod_per_worker::Dict{Int, <:KSVDMethod} = Dict()
@@ -94,8 +97,19 @@ function make_index_batches(method::BatchedParallelKSVD, indices)
     return Iterators.partition(basis_indices, method.batch_size_per_thread*Threads.nthreads())
 end
 
-"Helper for `@threads for (i, idx) in enumerate(indices)` use case."
-const cenumerate = collect ∘ enumerate
+"""
+We have to consider two cases.
+If we go "full batch", we can not allocate a buffer for each task. Instead, we allocate a buffer for each thread,
+but then have to pin tasks to threads (i.e. static scheduling).
+Otherwise, if we go "small batch", we can allocate a buffer for each task in the batch and then index accordinly, using dynamic scheduling.
+I have yet to investigate how dynamic scheduling impacts performance.
+"""
+get_buf_idx(::Type{OhMyThreads.StaticScheduler}, batch_buf_idx) = Threads.threadid()
+get_buf_idx(::Type{OhMyThreads.DynamicScheduler}, batch_buf_idx) = batch_buf_idx
+get_buf_idx(method::KSVDMethod, batch_buf_idx) = get_buf_idx(get_scheduler_t(method), batch_buf_idx)
+get_scheduler_t(::ParallelKSVD) = OhMyThreads.StaticScheduler
+get_scheduler_t(::BatchedParallelKSVD{pce, T, Scheduler}) where {pce, T, Scheduler<:OhMyThreads.Scheduler} = Scheduler
+
 
 """
     ksvd_update(method::ParallelKSVD{false}, Y, D, X)
@@ -125,12 +139,14 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
+    scheduler = get_scheduler_t(method)(; nchunks=Threads.nthreads())
     @inbounds for index_batch in index_batches
-        Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
+        # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
+        tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
             xₖ = X[k, :]
-            all(iszero, xₖ) && (D_copy[:, k] .= D[:, k]; continue)
+            all(iszero, xₖ) && (D_copy[:, k] .= D[:, k]; return)
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = E_Ω_buffers[buf_idx]
+            E_Ω = let buf = E_Ω_buffers[get_buf_idx(method, buf_idx)]
                 @view buf[:, 1:length(ωₖ)]
             end
 
@@ -145,7 +161,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
             ## <END OPTIMIZED BLOCK>
 
             # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*eps(eltype(E_Ω))))
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
@@ -198,12 +214,14 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
+    scheduler = get_scheduler_t(method)(; nchunks=Threads.nthreads())
     @inbounds for index_batch in index_batches
-        Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
+        # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
+        tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
             xₖ = X[k, :]
-            all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; continue)
+            all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; return)
             ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = E_Ω_buffers[buf_idx]
+            E_Ω = let buf = E_Ω_buffers[get_buf_idx(method, buf_idx)]
                 @view buf[:, 1:length(ωₖ)]
             end
 
@@ -212,7 +230,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
             fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
 
             # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*eps(eltype(E_Ω))))
+            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
@@ -261,7 +279,8 @@ end
         # correspond to examples that use the atom D[:, k]
         Eₖ .+= D[:, k:k] * X[k:k, :]
 
-        Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(length(ωₖ)), N, length(ωₖ))
+        # Ωₖ = sparse(ωₖ, 1:length(ωₖ), ones(length(ωₖ)), N, length(ωₖ))
+
         # Note that S is a vector that contains diagonal elements of
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
