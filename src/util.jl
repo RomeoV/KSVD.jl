@@ -3,6 +3,13 @@ import SparseArrays: sparsevec
 import Random: AbstractRNG, default_rng
 import Distributions: Binomial, quantile
 
+"Helper for `@threads for (i, idx) in enumerate(indices)` use case."
+const cenumerate = collect ∘ enumerate
+
+"Helper for `@threads for (lhs, rhs) in zip(foo, bar)` use case."
+const czip = collect ∘ zip
+
+
 function SparseArrays.sparsevec(d::DefaultDict{Int, T}, m::Int) where T
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
