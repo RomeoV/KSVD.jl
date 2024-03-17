@@ -114,8 +114,8 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
 
     N = size(Y, 2)
     X_cpy = copy(X)
-    D_cpy = localpart(method.D_cpy_buf)  # localpart needed if distibuted
-    D_cpy .= localpart(D)  # localpart needed if distibuted
+    D_cpy = method.D_cpy_buf
+    D_cpy .= D
     # D_cpy = zeros(size(D))
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
@@ -182,14 +182,14 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     end
 
     N = size(Y, 2)
-    E = localpart(method.E_buf)  # localpart is needed if distributed
+    E = method.E_buf
     # E = Y - D*X
     E .= Y
     fastdensesparsemul_threaded!(E, D, X, -1, 1)
 
     X_cpy = copy(X)
-    D_cpy = localpart(method.D_cpy_buf)
-    D_cpy .= localpart(D)
+    D_cpy = method.D_cpy_buf
+    D_cpy .= D
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
 
