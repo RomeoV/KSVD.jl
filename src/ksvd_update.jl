@@ -38,12 +38,13 @@ BatchedParallelKSVD{precompute_error, T}(; kwargs...) where {precompute_error, T
 end
 
 maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) = nothing
-function maybe_init_buffers!(method::Union{ParallelKSVD{false, T}, BatchedParallelKSVD{false, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {T<:Real}
-    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:(method.batch_size_per_thread*Threads.nthreads())]
+function maybe_init_buffers!(method::ParallelKSVD{precompute_error, T}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {precompute_error, T<:Real}
+    precompute_error && (method.E_buf=Matrix{T}(undef, emb_dim, n_samples);)
+    method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:Threads.nthreads()]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
-function maybe_init_buffers!(method::Union{ParallelKSVD{true, T}, BatchedParallelKSVD{true, T}}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {T<:Real}
-    method.E_buf=Matrix{T}(undef, emb_dim, n_samples)
+function maybe_init_buffers!(method::BatchedParallelKSVD{precompute_error, T}, emb_dim, n_dict_vecs, n_samples; pct_nz=1.) where {precompute_error, T<:Real}
+    precompute_error && (method.E_buf=Matrix{T}(undef, emb_dim, n_samples);)
     method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, pct_nz)) for _ in 1:(method.batch_size_per_thread*Threads.nthreads())]
     method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
 end
