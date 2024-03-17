@@ -115,7 +115,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
     N = size(Y, 2)
     X_cpy = copy(X)
     D_cpy = method.D_cpy_buf
-    D_cpy .= D
+    # D_cpy .= D
     # D_cpy = zeros(size(D))
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
@@ -128,7 +128,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
     @inbounds for index_batch in index_batches
         Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
             xₖ = X[k, :]
-            all(iszero, xₖ) && continue
+            all(iszero, xₖ) && (D_copy[:, k] .= D[:, k]; continue)
             ωₖ = findall(!iszero, xₖ)
             E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
@@ -189,7 +189,8 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
 
     X_cpy = copy(X)
     D_cpy = method.D_cpy_buf
-    D_cpy .= D
+    # D_cpy .= D
+
     @assert all(≈(1.), norm.(eachcol(D)))
     E_Ω_buffers = method.E_Ω_bufs
 
@@ -200,7 +201,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     @inbounds for index_batch in index_batches
         Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
             xₖ = X[k, :]
-            all(iszero, xₖ) && continue
+            all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; continue)
             ωₖ = findall(!iszero, xₖ)
             E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
