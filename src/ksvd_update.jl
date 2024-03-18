@@ -3,6 +3,7 @@ import SparseArrays: nzvalview
 import DistributedArrays: localpart  # we need this in case the buffers are DistributedArrays (DArrays)
 import OhMyThreads
 import OhMyThreads: tforeach
+import TimerOutputs: TimerOutput, @timeit
 
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_update(OptimizedKSVD(), Y, D, X)
 
@@ -56,28 +57,38 @@ for didactic reasons since the algorithm is the most clear here.
 
 However, it is recommended to use `BatchedParallelKSVD`.
 """
-function ksvd_update(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix)
+function ksvd_update(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix; timer::Union{TimerOutput, Nothing}=nothing)
+    isnothing(timer) && (timer = TimerOutput;)
+
     N = size(Y, 2)
     for k in 1:size(X, 1)
-        xₖ = X[k, :]
-        # ignore if the k-th row is zeros
-        all(iszero, xₖ) && continue
+        @timeit timer "find nonzeros" begin
+            xₖ = X[k, :]
+            # ignore if the k-th row is zeros
+            all(iszero, xₖ) && continue
 
-        # wₖ is the column indices where the k-th row of xₖ is non-zero,
-        # which is equivalent to [i for i in N if xₖ[i] != 0]
-        wₖ = findall(!iszero, xₖ)
+            # wₖ is the column indices where the k-th row of xₖ is non-zero,
+            # which is equivalent to [i for i in N if xₖ[i] != 0]
+            wₖ = findall(!iszero, xₖ)
+        end
 
-        # Eₖ * Ωₖ implies a selection of error columns that
-        # correspond to examples that use the atom D[:, k]
-        Eₖ = error_matrix(Y, D, X, k)
-        Ωₖ = sparse(wₖ, 1:length(wₖ), ones(length(wₖ)), N, length(wₖ))
+        @timeit timer "computer error matrix" begin
+            # Eₖ * Ωₖ implies a selection of error columns that
+            # correspond to examples that use the atom D[:, k]
+            Eₖ = error_matrix(Y, D, X, k)
+        end
+        @timeit timer "setup Ωₖ" begin
+            Ωₖ = sparse(wₖ, 1:length(wₖ), ones(length(wₖ)), N, length(wₖ))
+        end
         # Note that S is a vector that contains diagonal elements of
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        U, S, V = svd(Eₖ * Ωₖ)
-        D[:, k]  =  sign(U[1,1])       .* @view(U[:, 1])
-        X[k, wₖ] = (sign(U[1,1])*S[1]) .* @view(V[:, 1])
+        @timeit timer "compute and copy svd" begin
+            U, S, V = svd(Eₖ * Ωₖ)
+            D[:, k]  =  sign(U[1,1])       .* @view(U[:, 1])
+            X[k, wₖ] = (sign(U[1,1])*S[1]) .* @view(V[:, 1])
+        end
     end
     return D, X
 end
@@ -107,13 +118,21 @@ later computation ` E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ
 This can often be faster for large data sizes, and is also easier to parallelize.
 """
 function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{false}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
-                     reinitialize_buffers::Bool=false) where T
-    if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
-        KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
+                     reinitialize_buffers::Bool=false, timers::Union{Nothing, Vector{TimerOutput}}=nothing) where T
+
+    isnothing(timers) && (timers = [TimerOutput() for _ in 1:nchunks(method)];)
+    to = first(timers)
+
+    @timeit to "maybe init bufers" begin
+        if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+            KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
+        end
     end
 
     N = size(Y, 2)
-    X_cpy = copy(X)
+    @timeit to "copy X" begin
+        X_cpy = copy(X)
+    end
     D_cpy = method.D_cpy_buf
     # D_cpy .= D
     # D_cpy = zeros(size(D))
@@ -129,39 +148,63 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
     @inbounds for index_batch in index_batches
         # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
         tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
-            xₖ = X[k, :]
-            all(iszero, xₖ) && (D_copy[:, k] .= D[:, k]; return)
-            ωₖ = findall(!iszero, xₖ)
+            to_ = timers[buf_idx]
+            @timeit to_ "find nonzeros" begin
+                xₖ = X[k, :]
+                all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; return)
+                ωₖ = findall(!iszero, xₖ)
+            end
+
             E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
             end
 
-            ##<BEGIN OPTIMIZED BLOCK>
-            ## Original:
-            # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
-            ## Optimized:
-            E_Ω .= @view Y[:, ωₖ]
-            # # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
-            fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
-            fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
-            ## <END OPTIMIZED BLOCK>
+            @timeit to_ "compute E_Ω" begin
+                ##<BEGIN OPTIMIZED BLOCK>
+                ## Original:
+                # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
+                ## Optimized:
+                @timeit to_ "copy data" begin
+                    E_Ω .= @view Y[:, ωₖ]
+                end
+                @timeit to_ "compute matrix vector product" begin
+                    # # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
+                    # fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
+                    E_Ω .-= D*X[:, ωₖ]
+                end
+                @timeit to_ "compute outer product" begin
+                    # E_Ω .+= D[:, k] * X[k, ωₖ]'
+                    # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
+                    fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], 1, 1)
+                end
+                ## <END OPTIMIZED BLOCK>
+            end
 
-            # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
-            # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
-            D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
-            X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
+            @timeit to_ "compute and copy tsvd" begin
+                # truncated svd has some problems for column matrices. so then we just do svd.
+                # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
+                U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(eltype(E_Ω)))))
+                # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
+                D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
+                X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
+            end
         end
-        D[:, index_batch] .= @view D_cpy[:, index_batch]
-        # # <BEGIN OPTIMIZED BLOCK>
-        # # Original:
-        # X[index_batch, :] .= X_cpy[index_batch, :]
-        # # Optimized:
-        # we can exploit that the new nonzero indices don't change!
-        # Note: This doesn't seem to help in the sparse copy above.
-        row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
-        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
-        # # <END OPTIMIZED BLOCK>
+        @timeit to "copy results" begin
+            @timeit to "copy D" begin
+                D[:, index_batch] .= @view D_cpy[:, index_batch]
+            end
+            @timeit to "copy X" begin
+                # # <BEGIN OPTIMIZED BLOCK>
+                # # Original:
+                # X[index_batch, :] .= X_cpy[index_batch, :]
+                # # Optimized:
+                # we can exploit that the new nonzero indices don't change!
+                # Note: This doesn't seem to help in the sparse copy above.
+                row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+                nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+                # # <END OPTIMIZED BLOCK>
+            end
+        end
     end
     return D, X
 end
@@ -178,16 +221,28 @@ The result of this precomputation can later be used in the computation ` E_Ω .=
 by only having to compute the last part, and "resetting it" after using the result.
 """
 function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}}, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
-                     reinitialize_buffers::Bool=false) where T
-    if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
-        KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
+                     reinitialize_buffers::Bool=false, timers::Union{Nothing, Vector{TimerOutput}}=nothing) where T
+
+    isnothing(timers) && (timers = [TimerOutput() for _ in 1:nchunks(method)];)
+    to = first(timers)
+
+    @timeit to "maybe init bufers" begin
+        if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+            KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
+        end
     end
 
     N = size(Y, 2)
     E = method.E_buf
     # E = Y - D*X
-    E .= Y
-    fastdensesparsemul_threaded!(E, D, X, -1, 1)
+    @timeit to "Copy and precompute buffers" begin
+        @timeit to "Copy" begin
+            E .= Y
+        end
+        @timeit to "Mul" begin
+            fastdensesparsemul_threaded!(E, D, X, -1, 1)
+        end
+    end
 
     X_cpy = copy(X)
     D_cpy = method.D_cpy_buf
@@ -204,45 +259,60 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     @inbounds for index_batch in index_batches
         # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
         tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
-            xₖ = X[k, :]
-            all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; return)
-            ωₖ = findall(!iszero, xₖ)
-            E_Ω = let buf = E_Ω_buffers[get_buf_idx(method, buf_idx)]
+            to_ = timers[buf_idx]
+            @timeit to_ "find nonzeros" begin
+                xₖ = X[k, :]
+                all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; return)
+                ωₖ = findall(!iszero, xₖ)
+            end
+            E_Ω = let buf = E_Ω_buffers[buf_idx]
                 @view buf[:, 1:length(ωₖ)]
             end
 
-            E_Ω .= E[:, ωₖ]
-            # E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
-            fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
+            @timeit to_ "compute E_Ω" begin
+                @timeit to_ "copy" begin
+                E_Ω .= E[:, ωₖ]
+                end
+                @timeit to_ "mul" begin
+                    # E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
+                    fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], 1, 1)
+                end
+            end
 
-            # truncated svd has some problems for column matrices. so then we just do svd.
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
-            # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
-            D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
-            X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
+            @timeit to_ "compute and copy tsvd" begin
+                # truncated svd has some problems for column matrices. so then we just do svd.
+                U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
+                # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
+                D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
+                X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
+            end
         end
 
-        # We undo the operations in the lines above to leave the error buffer "unmodified".
-        # # <BEGIN OPTIMIZED BLOCK>.
-        # # Original:
-        # E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
-        # # Optimized:
-        fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
-        fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
-        ##<END OPTIMIZED BLOCK>
+        @timeit to "Update errors" begin
+            # We undo the operations in the lines above to leave the error buffer "unmodified".
+            # # <BEGIN OPTIMIZED BLOCK>.
+            # # Original:
+            # E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
+            # # Optimized:
+            fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
+            fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
+            ##<END OPTIMIZED BLOCK>
+        end
 
-        # Finally, we copy over the results.
-        D[:, index_batch] .= D_cpy[:, index_batch]
-        # # <BEGIN OPTIMIZED BLOCK>.
-        # # Original:
-        # X[index_batch, :] .= X_cpy[index_batch, :]
-        ## THE NEXT OPTIMIZATION CAUSE OCCASIONAL ERRORS AND I DON'T KNOW WHY...
-        # # Optimized:
-        # we can exploit that the new nonzero indices don't change!
-        # Note: This doesn't seem to help in the sparse copy above.
-        row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
-        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
-        # # <END OPTIMIZED BLOCK>
+        @timeit to "copy results" begin
+            # Finally, we copy over the results.
+            D[:, index_batch] .= D_cpy[:, index_batch]
+            # # <BEGIN OPTIMIZED BLOCK>.
+            # # Original:
+            # X[index_batch, :] .= X_cpy[index_batch, :]
+            ## THE NEXT OPTIMIZATION CAUSE OCCASIONAL ERRORS AND I DON'T KNOW WHY...
+            # # Optimized:
+            # we can exploit that the new nonzero indices don't change!
+            # Note: This doesn't seem to help in the sparse copy above.
+            row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+            nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+            # # <END OPTIMIZED BLOCK>
+        end
     end
     return D, X
 end
