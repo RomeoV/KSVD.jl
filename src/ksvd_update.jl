@@ -106,6 +106,14 @@ end
 
 get_scheduler_t(::ParallelKSVD) = OhMyThreads.StaticScheduler
 get_scheduler_t(::BatchedParallelKSVD{pce, T, Scheduler}) where {pce, T, Scheduler<:OhMyThreads.Scheduler} = Scheduler
+function make_scheduler(method::KSVDMethod)
+    scheduler_t = get_scheduler_t(method)
+    if scheduler_t == OhMyThreads.SerialScheduler
+        scheduler_t()
+    else
+        scheduler_t(; nchunks=nchunks(method))
+    end
+end
 nchunks(method::KSVDMethod) = Threads.nthreads()
 
 """
@@ -144,7 +152,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
-    scheduler = get_scheduler_t(method)(; nchunks=Threads.nthreads())
+    scheduler = make_scheduler(method)
     @inbounds for index_batch in index_batches
         # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
         tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
@@ -255,7 +263,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     # depending on the method. I.e. for ParallelKSVD, the first index_batch is just the entire dataset,
     # and for BatchedParallelKSVD it's split into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
-    scheduler = get_scheduler_t(method)(; nchunks=Threads.nthreads())
+    scheduler = make_scheduler(method)
     @inbounds for index_batch in index_batches
         # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
         tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
