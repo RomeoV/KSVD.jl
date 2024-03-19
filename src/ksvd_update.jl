@@ -3,7 +3,7 @@ import SparseArrays: nzvalview
 import DistributedArrays: localpart  # we need this in case the buffers are DistributedArrays (DArrays)
 import OhMyThreads
 import OhMyThreads: tforeach
-import TimerOutputs: TimerOutput, @timeit
+import TimerOutputs: TimerOutput, @timeit_debug
 
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix) = ksvd_update(OptimizedKSVD(), Y, D, X)
 
@@ -62,7 +62,7 @@ function ksvd_update(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X
 
     N = size(Y, 2)
     for k in 1:size(X, 1)
-        @timeit timer "find nonzeros" begin
+        @timeit_debug timer "find nonzeros" begin
             xₖ = X[k, :]
             # ignore if the k-th row is zeros
             all(iszero, xₖ) && continue
@@ -72,19 +72,19 @@ function ksvd_update(method::LegacyKSVD, Y::AbstractMatrix, D::AbstractMatrix, X
             wₖ = findall(!iszero, xₖ)
         end
 
-        @timeit timer "computer error matrix" begin
+        @timeit_debug timer "computer error matrix" begin
             # Eₖ * Ωₖ implies a selection of error columns that
             # correspond to examples that use the atom D[:, k]
             Eₖ = error_matrix(Y, D, X, k)
         end
-        @timeit timer "setup Ωₖ" begin
+        @timeit_debug timer "setup Ωₖ" begin
             Ωₖ = sparse(wₖ, 1:length(wₖ), ones(length(wₖ)), N, length(wₖ))
         end
         # Note that S is a vector that contains diagonal elements of
         # a matrix Δ such that Eₖ * Ωₖ == U * Δ * V.
         # Non-zero entries of X are set to
         # the first column of V multiplied by Δ(1, 1)
-        @timeit timer "compute and copy svd" begin
+        @timeit_debug timer "compute and copy svd" begin
             U, S, V = svd(Eₖ * Ωₖ)
             D[:, k]  =  sign(U[1,1])       .* @view(U[:, 1])
             X[k, wₖ] = (sign(U[1,1])*S[1]) .* @view(V[:, 1])
@@ -129,15 +129,15 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                      reinitialize_buffers::Bool=false, timer::Union{Nothing, TimerOutput}=nothing, merge_all_timers=true) where T
 
     isnothing(timer) && (timer = TimerOutput();)
-    @timeit timer "ksvd_update" begin
-        @timeit timer "maybe init bufers" begin
+    @timeit_debug timer "ksvd_update" begin
+        @timeit_debug timer "maybe init bufers" begin
             if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
                 KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
             end
         end
 
         N = size(Y, 2)
-        @timeit timer "copy X" begin
+        @timeit_debug timer "copy X" begin
             X_cpy = copy(X)
         end
         D_cpy = method.D_cpy_buf
@@ -162,7 +162,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                 to_ = take!(timer_ch)
                 E_Ω_buf = take!(E_Ω_ch)
 
-                @timeit to_ "find nonzeros" begin
+                @timeit_debug to_ "find nonzeros" begin
                     xₖ = X[k, :]
                     if all(iszero, xₖ)
                         D_cpy[:, k] .= D[:, k];
@@ -174,21 +174,22 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
 
                 E_Ω = @view E_Ω_buf[:, 1:length(ωₖ)]
 
-                @timeit to_ "compute E_Ω" begin
+                @timeit_debug to_ "compute E_Ω" begin
                     ##<BEGIN OPTIMIZED BLOCK>
                     ## Original:
                     # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
                     ## Optimized:
-                    @timeit to_ "copy data" begin
+                    @timeit_debug to_ "copy data" begin
+                        # it's worth it to use @view here
                         E_Ω .= @view Y[:, ωₖ]
                         # E_Ω .= Y[:, ωₖ]
                     end
-                    @timeit to_ "compute matrix vector product" begin
+                    @timeit_debug to_ "compute matrix vector product" begin
                         # # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
                         # fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
                         E_Ω .-= D*X[:, ωₖ]
                     end
-                    @timeit to_ "compute outer product" begin
+                    @timeit_debug to_ "compute outer product" begin
                         # E_Ω .+= D[:, k] * X[k, ωₖ]'
                         # E_Ω .+= D[:, k] * xₖ[ωₖ]'
                         # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
@@ -197,7 +198,7 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                     ## <END OPTIMIZED BLOCK>
                 end
 
-                @timeit to_ "compute and copy tsvd" begin
+                @timeit_debug to_ "compute and copy tsvd" begin
                     # truncated svd has some problems for column matrices. so then we just do svd.
                     # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
                     U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
@@ -209,11 +210,11 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                 put!(timer_ch, to_)
                 put!(E_Ω_ch, E_Ω_buf)
             end
-            @timeit timer "copy results" begin
-                @timeit timer "copy D" begin
+            @timeit_debug timer "copy results" begin
+                @timeit_debug timer "copy D" begin
                     D[:, index_batch] .= @view D_cpy[:, index_batch]
                 end
-                @timeit timer "copy X" begin
+                @timeit_debug timer "copy X" begin
                     # # <BEGIN OPTIMIZED BLOCK>
                     # # Original:
                     # X[index_batch, :] .= X_cpy[index_batch, :]
@@ -227,10 +228,13 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
             end
         end
         close.([E_Ω_ch, timer_ch])
-        if merge_all_timers
-            merge!(timer, timers_inner...; tree_point=["ksvd_update"])
-        else
-            merge!(timer, first(timers_inner); tree_point=["ksvd_update"])
+
+        if haskey(timer, "ksvd_update")
+            if merge_all_timers
+                merge!(timer, timers_inner...; tree_point=["ksvd_update"])
+            else
+                merge!(timer, first(timers_inner); tree_point=["ksvd_update"])
+            end
         end
 
     end
@@ -254,7 +258,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     isnothing(timers) && (timers = [TimerOutput() for _ in 1:nchunks(method)];)
     to = first(timers)
 
-    @timeit to "maybe init bufers" begin
+    @timeit_debug to "maybe init bufers" begin
         if reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
             KSVD.maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2))
         end
@@ -263,11 +267,11 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
     N = size(Y, 2)
     E = method.E_buf
     # E = Y - D*X
-    @timeit to "Copy and precompute buffers" begin
-        @timeit to "Copy" begin
+    @timeit_debug to "Copy and precompute buffers" begin
+        @timeit_debug to "Copy" begin
             E .= Y
         end
-        @timeit to "Mul" begin
+        @timeit_debug to "Mul" begin
             fastdensesparsemul_threaded!(E, D, X, -1, 1)
         end
     end
@@ -288,7 +292,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
         # Threads.@threads for (buf_idx, k) in cenumerate(index_batch)
         tforeach(cenumerate(index_batch); scheduler) do (buf_idx, k)
             to_ = timers[buf_idx]
-            @timeit to_ "find nonzeros" begin
+            @timeit_debug to_ "find nonzeros" begin
                 xₖ = X[k, :]
                 all(iszero, xₖ) && (D_cpy[:, k] .= D[:, k]; return)
                 ωₖ = findall(!iszero, xₖ)
@@ -297,17 +301,17 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
                 @view buf[:, 1:length(ωₖ)]
             end
 
-            @timeit to_ "compute E_Ω" begin
-                @timeit to_ "copy" begin
+            @timeit_debug to_ "compute E_Ω" begin
+                @timeit_debug to_ "copy" begin
                 E_Ω .= E[:, ωₖ]
                 end
-                @timeit to_ "mul" begin
+                @timeit_debug to_ "mul" begin
                     # E_Ω .+= @view(D[:, k:k]) * X[k:k, ωₖ]
                     fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], 1, 1)
                 end
             end
 
-            @timeit to_ "compute and copy tsvd" begin
+            @timeit_debug to_ "compute and copy tsvd" begin
                 # truncated svd has some problems for column matrices. so then we just do svd.
                 U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
                 # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
@@ -316,7 +320,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
             end
         end
 
-        @timeit to "Update errors" begin
+        @timeit_debug to "Update errors" begin
             # We undo the operations in the lines above to leave the error buffer "unmodified".
             # # <BEGIN OPTIMIZED BLOCK>.
             # # Original:
@@ -327,7 +331,7 @@ function ksvd_update(method::Union{ParallelKSVD{true}, BatchedParallelKSVD{true}
             ##<END OPTIMIZED BLOCK>
         end
 
-        @timeit to "copy results" begin
+        @timeit_debug to "copy results" begin
             # Finally, we copy over the results.
             D[:, index_batch] .= D_cpy[:, index_batch]
             # # <BEGIN OPTIMIZED BLOCK>.
