@@ -199,10 +199,10 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                     end
                     @timeit_debug to_ "compute outer product" begin
                         # E_Ω .+= D[:, k] * X[k, ωₖ]'
+                        E_Ω .+= D[:, k] * X[k, ωₖ]'
                         # E_Ω .+= D[:, k] * xₖ[ωₖ]'
                         # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
                         # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], 1, 1)
-                        mul!(E_Ω, @view(D[:, k]), xₖ[ωₖ]', true, true)
                     end
                     ## <END OPTIMIZED BLOCK>
                 end
