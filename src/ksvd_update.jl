@@ -209,8 +209,9 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
 
                 @timeit_debug to_ "compute and copy tsvd" begin
                     # truncated svd has some problems for column matrices. so then we just do svd.
-                    U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
+                    # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
                     # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
+                    U, S, V = svd!(E_Ω)
                     # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
                     D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
                     X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
