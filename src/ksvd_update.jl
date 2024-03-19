@@ -139,11 +139,13 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
         N = size(Y, 2)
         @timeit_debug timer "copy X" begin
             X_cpy = copy(X)
+            Xt = SparseArrays.SparseMatrixCSC(X')
         end
         D_cpy = method.D_cpy_buf
         # D_cpy .= D
         # D_cpy = zeros(size(D))
         @assert all(≈(1.), norm.(eachcol(D)))
+
         E_Ω_ch = Channel{Matrix{T}}(length(method.E_Ω_bufs))
         foreach(buf->put!(E_Ω_ch, buf), method.E_Ω_bufs)
         timers_inner = [TimerOutput() for _ in 1:Threads.nthreads()]
@@ -163,11 +165,11 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                 E_Ω_buf = take!(E_Ω_ch)
 
                 @timeit_debug to_ "find nonzeros" begin
-                    xₖ = X[k, :]
+                    xₖ = Xt[:, k]
                     if all(iszero, xₖ)
                         D_cpy[:, k] .= D[:, k];
-                        put!.(timer_ch, to_); put!(E_Ω_ch, E_Ω_buf)
-                       return
+                        put!(timer_ch, to_); put!(E_Ω_ch, E_Ω_buf)
+                        return
                     end
                     ωₖ = findall(!iszero, xₖ)
                 end
@@ -187,21 +189,28 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                     @timeit_debug to_ "compute matrix vector product" begin
                         # # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
                         # fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
-                        E_Ω .-= D*X[:, ωₖ]
+                        # E_Ω .-= D*X[:, ωₖ]
+                        @timeit_debug to_ "get submatrix" begin
+                            submat = X[:, ωₖ]
+                        end
+                        @timeit_debug to_ "multiply" begin
+                            mul!(E_Ω, D, submat, -1, 1)
+                        end
                     end
                     @timeit_debug to_ "compute outer product" begin
                         # E_Ω .+= D[:, k] * X[k, ωₖ]'
                         # E_Ω .+= D[:, k] * xₖ[ωₖ]'
                         # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), X[k, ωₖ], 1, 1)
-                        fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], 1, 1)
+                        # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], 1, 1)
+                        mul!(E_Ω, @view(D[:, k]), xₖ[ωₖ]', true, true)
                     end
                     ## <END OPTIMIZED BLOCK>
                 end
 
                 @timeit_debug to_ "compute and copy tsvd" begin
                     # truncated svd has some problems for column matrices. so then we just do svd.
-                    # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
-                    U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
+                    U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
+                    # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
                     # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
                     D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
                     X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
