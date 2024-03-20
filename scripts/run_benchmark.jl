@@ -41,7 +41,7 @@ TimerOutputs.complement!(timer)
 @info "Finished actual run."
 
 ksvd_benchmark_dir = joinpath(dirname(pathof(KSVD)), "..", "ksvd_benchmarks")
-open(joinpath(ksvd_benchmark_dir, "bmark7.toml"), "w") do ofile
+open(joinpath(ksvd_benchmark_dir, "bmark9.toml"), "w") do ofile
     rev = `git rev-parse --short HEAD` |> readchomp
     timer_dict = TimerOutputs.todict(timer)
     timer_dict["ksvd_pkg_rev"] = rev
