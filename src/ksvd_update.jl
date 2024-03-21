@@ -226,12 +226,12 @@ function ksvd_update(method::Union{ParallelKSVD{false}, BatchedParallelKSVD{fals
                 @timeit_debug timer "copy X" begin
                     # # <BEGIN OPTIMIZED BLOCK>
                     # # Original:
-                    # X[index_batch, :] .= X_cpy[index_batch, :]
+                    X[index_batch, :] .= X_cpy[index_batch, :]
                     # # Optimized:
                     # we can exploit that the new nonzero indices don't change!
                     # Note: This doesn't seem to help in the sparse copy above.
-                    row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
-                    nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+                    # row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+                    # nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
                     # # <END OPTIMIZED BLOCK>
                 end
             end
