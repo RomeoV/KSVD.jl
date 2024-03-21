@@ -8,7 +8,7 @@ using TimerOutputs, OhMyThreads
 import TOML
 TimerOutputs.enable_debug_timings(KSVD)
 
-T = Float32
+T = Float64
 N = 100_000
 D = 768  # sample dimension
 K = 4*D  # dictionary dimension >= sample_dimension
@@ -41,7 +41,7 @@ TimerOutputs.complement!(timer)
 @info "Finished actual run."
 
 ksvd_benchmark_dir = joinpath(dirname(pathof(KSVD)), "..", "ksvd_benchmarks")
-open(joinpath(ksvd_benchmark_dir, "bmark3.toml"), "w") do ofile
+open(joinpath(ksvd_benchmark_dir, "bmark4.toml"), "w") do ofile
     rev = `git rev-parse --short HEAD` |> readchomp
     timer_dict = TimerOutputs.todict(timer)
     timer_dict["ksvd_pkg_rev"] = rev
