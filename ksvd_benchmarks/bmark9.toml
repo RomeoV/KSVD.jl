@@ -1,0 +1,57 @@
+total_time_ns = 86592081702
+total_allocated_bytes = 79622421536
+time_ns = 0
+n_calls = 0
+allocated_bytes = 0
+
+[inner_timers.ksvd_update]
+total_time_ns = 86592081702
+total_allocated_bytes = 79622421536
+time_ns = 86592081702
+n_calls = 1
+allocated_bytes = 79622421536
+
+    [inner_timers.ksvd_update.inner_timers."setup Ωₖ"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 25738175
+    n_calls = 4000
+    allocated_bytes = 11362416
+
+        [inner_timers.ksvd_update.inner_timers."setup Ωₖ".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."find nonzeros"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 28394766
+    n_calls = 4000
+    allocated_bytes = 4117616
+
+        [inner_timers.ksvd_update.inner_timers."find nonzeros".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."compute and copy svd"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 4001029473
+    n_calls = 4000
+    allocated_bytes = 7362841856
+
+        [inner_timers.ksvd_update.inner_timers."compute and copy svd".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."~ksvd_update~"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 29373723
+    n_calls = 1
+    allocated_bytes = 3008
+
+        [inner_timers.ksvd_update.inner_timers."~ksvd_update~".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."Update errors"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 82507545565
+    n_calls = 4000
+    allocated_bytes = 72244096640
+
+        [inner_timers.ksvd_update.inner_timers."Update errors".inner_timers]

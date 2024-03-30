@@ -1,0 +1,160 @@
+total_time_ns = 29781363473
+ksvd_pkg_rev = "bbd3776"
+total_allocated_bytes = 13009706016
+time_ns = 0
+n_calls = 0
+allocated_bytes = 0
+
+[inner_timers.ksvd_update]
+total_time_ns = 29781363473
+total_allocated_bytes = 13009706016
+time_ns = 29781363473
+n_calls = 1
+allocated_bytes = 13009706016
+
+    [inner_timers.ksvd_update.inner_timers."compute and copy tsvd"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 717907305
+    n_calls = 3072
+    allocated_bytes = 246793856
+
+        [inner_timers.ksvd_update.inner_timers."compute and copy tsvd".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."copy results"]
+    total_time_ns = 2870714801
+    total_allocated_bytes = 35224544
+    time_ns = 2870714801
+    n_calls = 24
+    allocated_bytes = 35224544
+
+        [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."~copy results~"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 131393
+        n_calls = 24
+        allocated_bytes = 1504
+
+            [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."~copy results~".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy D"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 1850681
+        n_calls = 24
+        allocated_bytes = 9216
+
+            [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy D".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy X"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 2868732727
+        n_calls = 24
+        allocated_bytes = 35213824
+
+            [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy X".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."find nonzeros"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 3677713556
+    n_calls = 3072
+    allocated_bytes = 56059200
+
+        [inner_timers.ksvd_update.inner_timers."find nonzeros".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."maybe init bufers"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 6921
+    n_calls = 1
+    allocated_bytes = 16
+
+        [inner_timers.ksvd_update.inner_timers."maybe init bufers".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."~ksvd_update~"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 37895106
+    n_calls = 1
+    allocated_bytes = 685632
+
+        [inner_timers.ksvd_update.inner_timers."~ksvd_update~".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."copy X"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 8937518
+    n_calls = 1
+    allocated_bytes = 32825200
+
+        [inner_timers.ksvd_update.inner_timers."copy X".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."compute E_Ω"]
+    total_time_ns = 22468188266
+    total_allocated_bytes = 12638117568
+    time_ns = 22468188266
+    n_calls = 3072
+    allocated_bytes = 12638117568
+
+        [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."copy data"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 1172025397
+        n_calls = 3072
+        allocated_bytes = 442368
+
+            [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."copy data".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute outer product"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 18145518442
+        n_calls = 3072
+        allocated_bytes = 12468123840
+
+            [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute outer product".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product"]
+        total_time_ns = 3133867715
+        total_allocated_bytes = 169416960
+        time_ns = 3133867715
+        n_calls = 3072
+        allocated_bytes = 169416960
+
+            [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product".inner_timers."get submatrix"]
+            total_time_ns = 0
+            total_allocated_bytes = 0
+            time_ns = 75580180
+            n_calls = 3072
+            allocated_bytes = 169048832
+
+                [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product".inner_timers."get submatrix".inner_timers]
+
+            [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product".inner_timers."~compute matrix vector product~"]
+            total_time_ns = 0
+            total_allocated_bytes = 0
+            time_ns = 9737544
+            n_calls = 3072
+            allocated_bytes = 122368
+
+                [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product".inner_timers."~compute matrix vector product~".inner_timers]
+
+            [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product".inner_timers.multiply]
+            total_time_ns = 0
+            total_allocated_bytes = 0
+            time_ns = 3048549991
+            n_calls = 3072
+            allocated_bytes = 245760
+
+                [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."compute matrix vector product".inner_timers.multiply.inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."~compute E_Ω~"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 16776712
+        n_calls = 3072
+        allocated_bytes = 134400
+
+            [inner_timers.ksvd_update.inner_timers."compute E_Ω".inner_timers."~compute E_Ω~".inner_timers]

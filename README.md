@@ -53,3 +53,12 @@ D::Matrix, X::SparseMatrix = ksvd_update(ksvd_method, Y, basis, X)
 ```
 
 [Matching Pursuit](https://en.wikipedia.org/wiki/Matching_pursuit) derives X from D and Y such that DX = Y in constraint that X be as sparse as possible.
+
+
+# Performance improvements
+
+Here is an overview of the performance improvements in the `ksvd_update` provided in this package, broken down by computation type.
+The data is computed using different commits on the `experiments` branch.
+More details will be added later.
+
+![benchmark results](/ksvd_benchmarks/figs/benchmark_results.png)

@@ -1,0 +1,125 @@
+total_time_ns = 190569877182
+total_allocated_bytes = 84645861832
+time_ns = 0
+n_calls = 0
+allocated_bytes = 0
+
+[inner_timers.ksvd_update]
+total_time_ns = 190569877182
+total_allocated_bytes = 84645861832
+time_ns = 190569877182
+n_calls = 1
+allocated_bytes = 84645861832
+
+    [inner_timers.ksvd_update.inner_timers."compute and copy tsvd"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 162365008754
+    n_calls = 2000
+    allocated_bytes = 28083368640
+
+        [inner_timers.ksvd_update.inner_timers."compute and copy tsvd".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers"]
+    total_time_ns = 6971
+    total_allocated_bytes = 1600
+    time_ns = 6971
+    n_calls = 1
+    allocated_bytes = 1600
+
+        [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers".inner_timers.Copy]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 568
+        n_calls = 1
+        allocated_bytes = 32
+
+            [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers".inner_timers.Copy.inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers".inner_timers."~Copy and precompute buffers~"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 5232
+        n_calls = 1
+        allocated_bytes = 1536
+
+            [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers".inner_timers."~Copy and precompute buffers~".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers".inner_timers.Mul]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 1171
+        n_calls = 1
+        allocated_bytes = 32
+
+            [inner_timers.ksvd_update.inner_timers."Copy and precompute buffers".inner_timers.Mul.inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."copy results"]
+    total_time_ns = 4439497336
+    total_allocated_bytes = 132126672
+    time_ns = 4439497336
+    n_calls = 125
+    allocated_bytes = 132126672
+
+        [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."~copy results~"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 1191910
+        n_calls = 125
+        allocated_bytes = 5504
+
+            [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."~copy results~".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy D"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 11086913
+        n_calls = 125
+        allocated_bytes = 16044000
+
+            [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy D".inner_timers]
+
+        [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy X"]
+        total_time_ns = 0
+        total_allocated_bytes = 0
+        time_ns = 4427218513
+        n_calls = 125
+        allocated_bytes = 116077168
+
+            [inner_timers.ksvd_update.inner_timers."copy results".inner_timers."copy X".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."Update errors"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 19252517305
+    n_calls = 2000
+    allocated_bytes = 56374139072
+
+        [inner_timers.ksvd_update.inner_timers."Update errors".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."find nonzeros"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 4436058938
+    n_calls = 2000
+    allocated_bytes = 39287616
+
+        [inner_timers.ksvd_update.inner_timers."find nonzeros".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."maybe init bufers"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 8886
+    n_calls = 1
+    allocated_bytes = 64
+
+        [inner_timers.ksvd_update.inner_timers."maybe init bufers".inner_timers]
+
+    [inner_timers.ksvd_update.inner_timers."~ksvd_update~"]
+    total_time_ns = 0
+    total_allocated_bytes = 0
+    time_ns = 76778992
+    n_calls = 1
+    allocated_bytes = 16938168
+
+        [inner_timers.ksvd_update.inner_timers."~ksvd_update~".inner_timers]
