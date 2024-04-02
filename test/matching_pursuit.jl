@@ -1,7 +1,7 @@
 import Random: seed!, TaskLocalRNG, rand!
 import SparseArrays
 import SparseArrays: sparse
-import StatsBase: sample
+import StatsBase: sample, mean, middle
 test_cuda_ext = try
     using CUDA, FLoops
     true
@@ -74,6 +74,26 @@ end
             @test res ≈ res_baseline rtol=sqrt(eps(T))
             @test eltype(res) == T
         end
+
+        # OMP uses a different algorithm, so we can't expect it to be exactly equal.
+        # Instead, we check that we "mostly" use the same components, and have a similarly small residual (within 5%).
+        @testset for method in vcat([KSVD.OrthogonalMatchingPursuit()])
+            res = KSVD.sparse_coding(method, data, B)
+
+            mismatch_pct_per_column = [begin
+                I_lhs, _ = findnz(col); I_rhs, _ = findnz(col_baseline)
+                length(setdiff(I_lhs, I_rhs)) / middle(length(I_lhs), length(I_rhs))
+            end for (col, col_baseline) in zip(eachcol(res), eachcol(res_baseline))]
+
+            # make sure we mostly choose the same components
+            @test mean(mismatch_pct_per_column) < 0.1
+
+            # make sure we have similarly small residual
+            residual_baseline = mean(abs, data - B*res_baseline)
+            residual = mean(abs, data - B*res)
+            @test residual_baseline ≈ residual rtol=0.05
+       end
+
     end
 end
 
