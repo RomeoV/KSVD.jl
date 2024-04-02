@@ -17,7 +17,6 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TSVD = "9449cd9e-2762-5aa3-a617-5413e99d722e"
 ThreadedDenseSparseMul = "3d91a4ae-1078-4a13-9dfb-76f34bf57907"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-Transducers = "28d57a85-8fef-5791-bfe6-a80928e7c999"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -35,7 +34,6 @@ SparseArrays = "1.9"
 TSVD = "0.4"
 ThreadedDenseSparseMul = "0.4"
 TimerOutputs = "0.5"
-Transducers = "0.4"
 julia = "1.9"
 
 [extras]

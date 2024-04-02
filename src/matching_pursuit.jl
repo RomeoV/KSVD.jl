@@ -2,7 +2,7 @@
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
 using LinearAlgebra
 using DataStructures
-using Transducers
+using OhMyThreads: tcollect
 import SparseArrays: nonzeroinds
 
 const default_max_nnz = 10
@@ -96,6 +96,7 @@ sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(
 
 get_method_collect_fn(::MatchingPursuit) = collect
 get_method_collect_fn(::ParallelMatchingPursuit) = tcollect
+get_method_collect_fn(::OrthogonalMatchingPursuit) = tcollect
 
 """
     sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit},
@@ -103,7 +104,8 @@ get_method_collect_fn(::ParallelMatchingPursuit) = tcollect
 
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
 """
-function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit}, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
+function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit},
+                       data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
     K = size(dictionary, 2)
     N = size(data, 2)
 

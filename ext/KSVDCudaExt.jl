@@ -1,8 +1,7 @@
 module KSVDCudaExt
 using CUDA
 using KSVD
-import KSVD: sparse_coding, CUDAAcceleratedMatchingPursuit
-using FLoops
+import KSVD: sparse_coding, CUDAAcceleratedMatchingPursuit, czip
 using SparseArrays: sparse, nonzeroinds, nonzeros
 
 function KSVD.sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
@@ -36,7 +35,7 @@ function KSVD.sparse_coding(method::CUDAAcceleratedMatchingPursuit, data::Abstra
     @debug "Getting ready for processing"
     for (j_batch, products_batch) in zip(data_iter, ch_gpu_to_cpu)
         @debug "Processing $j_batch"
-        @floop for (j_, j) in zip(j_batch, axes(products_batch, 2))
+        Threads.@threads for (j_, j) in czip(j_batch, axes(products_batch, 2))
             datacol = @view data[:, j]; productcol = @view products_batch[:, j]
             data_vec = KSVD.matching_pursuit_(
                             method,
