@@ -1,6 +1,7 @@
 import LinearAlgebra: norm
 import SparseArrays: sprand
 import Random: TaskLocalRNG, seed!
+import StatsBase: std
 
 @testset "Compare to Legacy Implementation." begin
     if Threads.nthreads == 1
@@ -36,29 +37,44 @@ import Random: TaskLocalRNG, seed!
             KSVD.maybe_init_buffers!(method, E, 2*E, N)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
-            @test D_res ≈ D_baseline rtol=10*sqrt(eps(T))
-            @test X_res ≈ X_baseline rtol=10*sqrt(eps(T))
+            @test D_res ≈ D_baseline rtol=sqrt(eps(T))
+            @test X_res ≈ X_baseline rtol=sqrt(eps(T))
 
             @test all(≈(1.), norm.(eachcol(D_res)))
             @test eltype(D_res) == eltype(X_res) == T
         end
-        # We don't expect to get the same results after one iteration for out-of-order operations.
-        # We will test later for convergence though.
-        @testset for method in [
-                ###KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=true, batch_size_per_thread=40),
-                KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=true, batch_size_per_thread=40),
-                KSVD.ParallelKSVD{false, T}(shuffle_indices=false),
-                ###KSVD.ParallelKSVD{true, T}(shuffle_indices=false),
-            ]
-            KSVD.maybe_init_buffers!(method, E, 2*E, N)
-            D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
-            @test D_res ≈ D_baseline rtol=10*sqrt(eps(T)) skip=true;
-            @test X_res ≈ X_baseline rtol=10*sqrt(eps(T)) skip=true;
+         # We don't expect to get the same results after one iteration for out-of-order operations.
+         # Instead we test if they do approximately as well as the baseline.
+         @testset for method in [
+                 KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=true, batch_size_per_thread=2),
+                 KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=true, batch_size_per_thread=2),
+             ]
+             KSVD.maybe_init_buffers!(method, E, 2*E, N)
+             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
-            @test all(≈(1.), norm.(eachcol(D_res)))
-            @test eltype(D_res) == eltype(X_res) == T
-        end
+             @test D_res ≈ D_baseline rtol=sqrt(eps(T)) skip=true;
+             @test X_res ≈ X_baseline rtol=sqrt(eps(T)) skip=true;
+             @test std(data - D_res * X_res) ≈ std(data - D_baseline * X_baseline)  rtol=1e-2
+
+             @test all(≈(1.), norm.(eachcol(D_res)))
+             @test eltype(D_res) == eltype(X_res) == T
+         end
+
+        # Finally we test the parallel version, which has much worse convergence.
+         @testset for method in [
+                 KSVD.ParallelKSVD{false, T}(shuffle_indices=false),
+                 KSVD.ParallelKSVD{true, T}(shuffle_indices=false),
+             ]
+             KSVD.maybe_init_buffers!(method, E, 2*E, N)
+             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
+
+             @test D_res ≈ D_baseline rtol=sqrt(eps(T)) skip=true;
+             @test X_res ≈ X_baseline rtol=sqrt(eps(T)) skip=true;
+
+             @test all(≈(1.), norm.(eachcol(D_res)))
+             @test eltype(D_res) == eltype(X_res) == T
+         end
     end
 end
 
