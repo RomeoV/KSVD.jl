@@ -17,7 +17,7 @@ export LegacyMatchingPursuit, ParallelMatchingPursuit
 using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
-import Transducers: tcollect
+# import Transducers: tcollect
 import LinearAlgebra: normalize!
 using TimerOutputs
 
@@ -29,7 +29,11 @@ using ThreadedDenseSparseMul
 
 include("util.jl")
 include("matching_pursuit.jl")
+include("ksvd_types.jl")
 include("ksvd_update.jl")
+include("ksvd_update_legacy.jl")
+include("ksvd_update_optimized.jl")
+include("ksvd_update_threaded_utils.jl")
 
 """
     dictionary_learning(
@@ -60,7 +64,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
                              show_progress=true,
                              verbose=false
                              ) where T
-    to = TimerOutput()
+    timer = TimerOutput()
     K = n_atoms
     n, N = size(Y)
 
@@ -72,7 +76,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     min_n_zeros = ceil(Int, sparsity_allowance * length(X))
 
     # D is a dictionary matrix that contains atoms for columns.
-    @timeit to "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
+    @timeit timer "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
     @assert all(≈(1.0), norm.(eachcol(D)))
 
     p = Progress(max_iter)
@@ -80,9 +84,9 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
 
     for i in 1:max_iter
         verbose && @info "Starting sparse coding"
-        @timeit to "Sparse coding" X = sparse_coding(sparse_coding_method, Y, D)
+        X = sparse_coding(sparse_coding_method, Y, D; timer)
         verbose && @info "Starting svd"
-        @timeit to "KSVD" D, X = ksvd_update(ksvd_method, Y, D, X)
+        D, X = ksvd_update(ksvd_method, Y, D, X; timer)
         trace_convergence && @spawn (@info "loss=$(norm(Y - D*X)), nnz_col=$(mean(sum.(!iszero, eachcol(X))))")
 
         # return if the number of zero entries are <= max_n_zeros
@@ -92,7 +96,7 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
         end
         show_progress && next!(p)
     end
-    show(to)
+    show(timer)
     return D, X
 end
 

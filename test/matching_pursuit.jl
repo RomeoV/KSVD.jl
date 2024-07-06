@@ -1,6 +1,6 @@
 import Random: seed!, TaskLocalRNG, rand!
 import SparseArrays
-import SparseArrays: sparse
+import SparseArrays: sparse, findnz
 import StatsBase: sample, mean, middle
 test_cuda_ext = try
     using CUDA, FLoops

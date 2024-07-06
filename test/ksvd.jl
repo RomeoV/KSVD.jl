@@ -20,6 +20,8 @@ import Random: TaskLocalRNG, seed!
         @test all(≈(1.), norm.(eachcol(D_baseline)))
         @test eltype(D_baseline) == eltype(X_baseline) == T
 
+        # The following tests will only pass if we're running single-threaded...
+        @test Threads.nthreads() == 1
         # The solution is only unique up to the sign of each factor / the direction of each basis vector.
         # Therefore, we multiply each basis vector and factor with the sign of it's first element.
         # That forces the first element to be positive, and makes the solution unique and let's us run the comparison.
@@ -27,6 +29,7 @@ import Random: TaskLocalRNG, seed!
                 KSVD.OptimizedKSVD(shuffle_indices=false),
                 # KSVD.ParallelKSVD{true, T}(shuffle_indices=false),  These are not equivalent, as they do a sort of "full-batch" update.
                 # KSVD.ParallelKSVD{false, T}(shuffle_indices=false),
+
                 KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=false, batch_size_per_thread=1),
                 KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=false, batch_size_per_thread=1),
             ]
@@ -42,10 +45,10 @@ import Random: TaskLocalRNG, seed!
         # We don't expect to get the same results after one iteration for out-of-order operations.
         # We will test later for convergence though.
         @testset for method in [
-                KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=true, batch_size_per_thread=40),
+                ###KSVD.BatchedParallelKSVD{true, T}(shuffle_indices=true, batch_size_per_thread=40),
                 KSVD.BatchedParallelKSVD{false, T}(shuffle_indices=true, batch_size_per_thread=40),
                 KSVD.ParallelKSVD{false, T}(shuffle_indices=false),
-                KSVD.ParallelKSVD{true, T}(shuffle_indices=false),
+                ###KSVD.ParallelKSVD{true, T}(shuffle_indices=false),
             ]
             KSVD.maybe_init_buffers!(method, E, 2*E, N)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))

@@ -92,7 +92,7 @@ function validate_mp_args(max_nnz, max_iter, rtol, other_args...)
     0. <= rtol <= 1. || throw(ArgumentError("`rtol` must be in [0,1]"))
 end
 
-sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix) = sparse_coding(ParallelMatchingPursuit(), data, dictionary)
+sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix; timer=TimerOutput()) = sparse_coding(ParallelMatchingPursuit(), data, dictionary; timer)
 
 get_method_collect_fn(::MatchingPursuit) = collect
 get_method_collect_fn(::ParallelMatchingPursuit) = tcollect
@@ -105,7 +105,9 @@ get_method_collect_fn(::OrthogonalMatchingPursuit) = tcollect
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
 """
 function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit},
-                       data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}) where T
+                       data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput()) where {T}
+    @timeit_debug timer "Sparse coding" begin
+
     K = size(dictionary, 2)
     N = size(data, 2)
 
@@ -115,7 +117,8 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, O
     # if the data is very large we might not want to precompute this.
     products = (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
 
-    X_::Vector{SparseVector{T, Int}} = collect_fn(
+    # X_list::Vector{SparseVector{T, Int}} = collect_fn(
+    X_ = collect_fn(
         matching_pursuit_(
                 method,
                 datacol,
@@ -123,7 +126,7 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, O
                 DtD;
                 products_init=(method.precompute_products ? productcol : nothing)
             )
-        for (datacol, productcol) in zip(eachcol(data), eachcol(products))
+        for (datacol, productcol) in czip(eachcol(data), eachcol(products))
     )
     # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
     # I tried `hcat(X_...)` and `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` they were both very slow.
@@ -138,6 +141,8 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, O
         end
         sparse(I, J, V, K, N)
     end
+
+    end  # @timeit
     return X
 end
 
@@ -259,11 +264,12 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
     return sparsevec(xdict, n_atoms)
 end
 
-" This is the original implementation by https://github.com/IshitaTakeshi, useful for
-numerical comparison and didactic purposes. "
-function sparse_coding(method::LegacyMatchingPursuit,
-                       data::AbstractMatrix{T},
-                       dictionary::AbstractMatrix{T}) where T
+""" This is the original implementation by https://github.com/IshitaTakeshi, useful for
+numerical comparison and didactic purposes. """
+function sparse_coding(method::LegacyMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T};
+                       timer=TimerOutput()) where T
+    @timeit_debug timer "Sparse coding" begin
+
     K = size(dictionary, 2)
     N = size(data, 2)
 
@@ -276,8 +282,11 @@ function sparse_coding(method::LegacyMatchingPursuit,
             dictionary
         )
     end
+
+    end  # @timeit
     return X
 end
+
 function matching_pursuit_(method::LegacyMatchingPursuit,
                            data::AbstractVector{T},
                            dictionary::AbstractMatrix{T}) where T
