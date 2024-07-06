@@ -101,4 +101,6 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
     return D, X
 end
 
+const dictionary_learning = ksvd  # for compatibility
+
 end # module
