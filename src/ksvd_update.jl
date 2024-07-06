@@ -67,6 +67,8 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
             put!(E_Ω_buf_ch, E_Ω_buf); put!(timer_ch, timer_)
         end
 
+        maybe_update_errors!(method, E, D_cpy, X_cpy, D, X, index_batch; timer)
+
         @timeit_debug timer "copy D results" begin
             D[:, index_batch] .= @view D_cpy[:, index_batch]
         end
@@ -125,7 +127,7 @@ function ksvd_update_X!(X, X_cpy, index_batch, timer=TimerOutput())
     end
 end
 
-function compute_E_Ω!(::ThreadedKSVDMethodWith{true}, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer=TimerOutput())
+function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{true}, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer=TimerOutput())
     @timeit_debug timer "compute E_Ω" begin
 
     E_Ω = @view E_Ω_buf[:, 1:length(ωₖ)]
@@ -141,7 +143,7 @@ function compute_E_Ω!(::ThreadedKSVDMethodWith{true}, E_Ω_buf, E, Y, D, X, x�
     end  # @timeit
 end
 
-function compute_E_Ω!(::ThreadedKSVDMethodWith{false}, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer=TimerOutput())
+function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{false}, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer=TimerOutput())
     @timeit_debug timer "compute E_Ω" begin
 
     E_Ω = @view E_Ω_buf[:, 1:length(ωₖ)]
@@ -168,16 +170,32 @@ function compute_E_Ω!(::ThreadedKSVDMethodWith{false}, E_Ω_buf, E, Y, D, X, x�
     end  # @timeit
 end
 
-function maybe_prepare_error_buffer!(method::ThreadedKSVDMethodWith{false}, Y, D, X; timer=TimerOutput())
+function maybe_prepare_error_buffer!(method::ThreadedKSVDMethodPrecomp{false}, Y, D, X; timer=TimerOutput())
     method.E_buf
 end
-function maybe_prepare_error_buffer!(method::ThreadedKSVDMethodWith{true}, Y, D, X; timer=TimerOutput())
+function maybe_prepare_error_buffer!(method::ThreadedKSVDMethodPrecomp{true}, Y, D, X; timer=TimerOutput())
     E = method.E_buf
     # E = Y - D*X
     @timeit_debug timer "Copy error buffer" begin
         E .= Y
     end
     @timeit_debug timer "Compute error buffer" begin
-        fastdensesparsemul_threaded!(E, D, X, -1, 1)
+        E .-= D*X
+        # fastdensesparsemul_threaded!(E, D, X, -1, 1)
+    end
+end
+
+
+function maybe_update_errors!(::ThreadedKSVDMethodPrecomp{false}, E, D_cpy, X_cpy, D, X, index_batch; timer=TimerOutput()) end
+function maybe_update_errors!(::ThreadedKSVDMethodPrecomp{true}, E, D_cpy, X_cpy, D, X, index_batch; timer=TimerOutput())
+    @timeit_debug timer "Update errors" begin
+        # We undo the operations in the lines above to leave the error buffer "unmodified".
+        # # <BEGIN OPTIMIZED BLOCK>.
+        # # Original:
+        # E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
+        # # Optimized:
+        fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
+        fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
+        ##<END OPTIMIZED BLOCK>
     end
 end
