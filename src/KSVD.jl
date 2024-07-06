@@ -19,6 +19,7 @@ using Base.Threads, Random, SparseArrays, LinearAlgebra
 using TSVD
 # import Transducers: tcollect
 import LinearAlgebra: normalize!
+import OhMyThreads
 using TimerOutputs
 
 # importing StatsBase is also fine.
@@ -82,16 +83,16 @@ function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
     p = Progress(max_iter)
     maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=1.0)
 
-    for i in 1:max_iter
+    for _ in 1:max_iter
         verbose && @info "Starting sparse coding"
         X = sparse_coding(sparse_coding_method, Y, D; timer)
         verbose && @info "Starting svd"
         D, X = ksvd_update(ksvd_method, Y, D, X; timer)
-        trace_convergence && @spawn (@info "loss=$(norm(Y - D*X)), nnz_col=$(mean(sum.(!iszero, eachcol(X))))")
+        trace_convergence && Threads.@spawn (@info "loss=$(norm(Y - D*X)), nnz_col=$(mean(sum.(!iszero, eachcol(X))))")
 
         # return if the number of zero entries are <= max_n_zeros
         if sum(iszero, X) > min_n_zeros
-            show(to)
+            show(timer)
             return D, X
         end
         show_progress && next!(p)
