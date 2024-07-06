@@ -23,9 +23,9 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
-[extensions]
-KSVDCudaExt = ["CUDA"]
-KSVDDistributedExt = ["Distributed"]
+# [extensions]
+# KSVDCudaExt = ["CUDA"]
+# KSVDDistributedExt = ["Distributed"]
 
 [compat]
 DataStructures = "0.18"

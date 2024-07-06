@@ -1,13 +1,11 @@
 import Random: shuffle
 import SparseArrays: nzvalview, nonzeroinds
-import DistributedArrays: localpart  # we need this in case the buffers are DistributedArrays (DArrays)
 import OhMyThreads
 import OhMyThreads: tforeach
 # import OhMyThreads: SerialScheduler
 import TimerOutputs: TimerOutput, @timeit
 import ChunkSplitters: chunks
 import Base.Threads: nthreads, threadpool
-import Infiltrator: @infiltrate
 
 # set a default
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, timer=TimerOutput()) = ksvd_update(OptimizedKSVD(), Y, D, X, timer)
