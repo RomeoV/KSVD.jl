@@ -12,5 +12,5 @@ end
 
 @testset "Run the whole thing" begin
     data = rand(100, 500)
-    dictionary_learning(data, 200)
+    ksvd(data, 200)
 end

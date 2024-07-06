@@ -33,12 +33,12 @@ D is a dictionary. Each column of D represents an atom.
 K-SVD derives D and X such that DX ≈ Y from only Y.  
 
 ```julia
-D, X = dictionary_learning(Y, 256)
+D, X = ksvd(Y, 256)
 
 # we can control the matching pursuit stage and ksvd stage through method structs
 ksvd_method = BatchedParallelKSVD()
 mp_Method = ParallelMatchingPursuit()
-D, X = dictionary_learning(Y, 256;
+D, X = ksvd(Y, 256;
                            ksvd_method=ksvd_method,
                            sparse_coding_method=mp_method)
 ```

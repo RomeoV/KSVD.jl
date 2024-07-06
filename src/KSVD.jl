@@ -10,7 +10,7 @@ module KSVD
 # If you try to read the code, I recommend you to see Figure 2 first.
 #
 
-export dictionary_learning, matching_pursuit, ksvd_update
+export ksvd, matching_pursuit, ksvd_update
 export LegacyKSVD, OptimizedKSVD, ParallelKSVD, BatchedParallelKSVD
 export LegacyMatchingPursuit, ParallelMatchingPursuit
 
@@ -37,7 +37,7 @@ include("ksvd_update_optimized.jl")
 include("ksvd_update_threaded_utils.jl")
 
 """
-    dictionary_learning(
+    ksvd(
          Y::AbstractMatrix, n_atoms::Int;
          sparsity_allowance::Float64 = 0.1,
          max_iter::Int = 10)
@@ -56,7 +56,7 @@ Y is expected to be `(num_features x num_samples)`.
     every iteration.
 ```
 """
-function dictionary_learning(Y::AbstractMatrix{T}, n_atoms::Int;
+function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
                              sparsity_allowance = 1.0,
                              ksvd_method = OptimizedKSVD(),
                              sparse_coding_method = MatchingPursuit(),
