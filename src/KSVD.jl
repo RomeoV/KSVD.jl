@@ -28,6 +28,7 @@ mean(vec::AbstractVector) = sum(vec)/length(vec)
 using ThreadedDenseSparseMul
 
 
+include("set_num_threads.jl")
 include("util.jl")
 include("matching_pursuit.jl")
 include("ksvd_types.jl")
@@ -35,6 +36,10 @@ include("ksvd_update.jl")
 include("ksvd_update_legacy.jl")
 include("ksvd_update_optimized.jl")
 include("ksvd_update_threaded_utils.jl")
+function __init__()
+    set_num_threads(Threads.nthreads())
+end
+
 
 """
     ksvd(
