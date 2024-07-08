@@ -30,7 +30,7 @@ The result of this precomputation can later be used in the computation ` E_Ω .=
 by only having to compute the last part, and "resetting it" after using the result.
 """
 function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
-                     force_reinitialize_buffers::Bool=false, timer=TimerOutput(), merge_all_timers=true) where T
+                     force_reinitialize_buffers::Bool=false, timer=TimerOutput(), merge_all_timers=false) where T
     @timeit_debug timer "KSVD update" begin
 
     if force_reinitialize_buffers || !is_initialized(method)
