@@ -2,11 +2,11 @@
 # https://en.wikipedia.org/wiki/Matching_pursuit#The_algorithm
 using LinearAlgebra
 using DataStructures
-using OhMyThreads: tcollect
+using OhMyThreads: tmap
 import SparseArrays: nonzeroinds
 
 const default_max_nnz = 10
-const default_rtol = 1e-6
+const default_rtol = 1e-2
 
 abstract type SparseCodingMethod end
 """ 'Baseline' single threaded but optimized implementation.
@@ -94,9 +94,9 @@ end
 
 sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix; timer=TimerOutput()) = sparse_coding(ParallelMatchingPursuit(), data, dictionary; timer)
 
-get_method_collect_fn(::MatchingPursuit) = collect
-get_method_collect_fn(::ParallelMatchingPursuit) = tcollect
-get_method_collect_fn(::OrthogonalMatchingPursuit) = tcollect
+get_method_map_fn(::MatchingPursuit) = map
+get_method_map_fn(::ParallelMatchingPursuit) = tmap
+get_method_map_fn(::OrthogonalMatchingPursuit) = tmap
 
 """
     sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit},
@@ -111,23 +111,21 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, O
     K = size(dictionary, 2)
     N = size(data, 2)
 
-    collect_fn = get_method_collect_fn(method)
+    map_fn = get_method_map_fn(method)
 
     DtD = dictionary'*dictionary
     # if the data is very large we might not want to precompute this.
     products = (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
 
-    # X_list::Vector{SparseVector{T, Int}} = collect_fn(
-    X_ = collect_fn(
+    X_ = map_fn(czip(eachcol(data), eachcol(products))) do (datacol, productcol)
         matching_pursuit_(
                 method,
                 datacol,
                 dictionary,
                 DtD;
                 products_init=(method.precompute_products ? productcol : nothing)
-            )
-        for (datacol, productcol) in czip(eachcol(data), eachcol(products))
-    )
+        )
+    end
     # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
     # I tried `hcat(X_...)` and `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` they were both very slow.
     # This version seems to overcome the type inference issues and makes the code much faster.
@@ -149,12 +147,12 @@ end
 @inbounds function matching_pursuit_(
         method::Union{OrthogonalMatchingPursuit},
         data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-        products_init::Union{Nothing, AbstractVector{T}}=nothing) :: SparseVector{T, Int} where T
+        products_init::Union{Nothing, AbstractVector{T}}=nothing) where T
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
-    xdict = DefaultDict{Int, T}(zero(T))
+    # xdict = DefaultDict{Int, T}(zero(T))
     norm_data = norm(data)
 
     products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
@@ -228,7 +226,7 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 @inbounds function matching_pursuit_(
         method::Union{MatchingPursuit, ParallelMatchingPursuit, GPUAcceleratedMatchingPursuit},
         data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-        products_init::Union{Nothing, AbstractVector{T}}=nothing) :: SparseVector{T, Int} where T
+        products_init::Union{Nothing, AbstractVector{T}}=nothing) where T
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
@@ -240,6 +238,8 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
     products_abs = abs.(products)  # prealloc
 
     for i in 1:max_iter
+        !isfinite(norm(residual)) && @show norm(residual), residual
+        !isfinite(norm_data) && @show norm_data
         if norm(residual)/norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
