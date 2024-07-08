@@ -10,22 +10,19 @@ module KSVD
 # If you try to read the code, I recommend you to see Figure 2 first.
 #
 
-export ksvd, matching_pursuit, ksvd_update
+export ksvd, ksvd_update, sparse_coding
 export LegacyKSVD, OptimizedKSVD, ParallelKSVD, BatchedParallelKSVD
 export LegacyMatchingPursuit, ParallelMatchingPursuit
 
-using ProgressMeter
 using Base.Threads, Random, SparseArrays, LinearAlgebra
-using TSVD
-# import Transducers: tcollect
+import TSVD: tsvd
 import LinearAlgebra: normalize!
+import ThreadedDenseSparseMul: fastdensesparsemul!, fastdensesparsemul_threaded!, fastdensesparsemul_outer!, fastdensesparsemul_outer_threaded!
 import OhMyThreads
-using TimerOutputs
-
-# importing StatsBase is also fine.
-mean(vec::AbstractVector) = sum(vec)/length(vec)
-
-using ThreadedDenseSparseMul
+import TimerOutputs
+import TimerOutputs: @timeit_debug
+import StatsBase: mean
+import ProgressMeter: Progress
 
 
 include("set_num_threads.jl")
@@ -42,68 +39,79 @@ end
 
 
 """
-    ksvd(
-         Y::AbstractMatrix, n_atoms::Int;
+    ksvd(Y::AbstractMatrix, n_atoms::Int, max_nnz=max(n_atoms÷10, 1);
          sparsity_allowance::Float64 = 0.1,
-         max_iter::Int = 10)
+         maxiter::Int = 10)
 
 Run K-SVD that designs an efficient dictionary D for sparse representations,
 and returns X such that DX = Y or DX ≈ Y.
 
 Y is expected to be `(num_features x num_samples)`.
-
-```
-# Arguments
-* `sparsity_allowance`: Stop iteration if the number of zeros in X / the number
-    of elements in X > sparsity_allowance.
-* `max_iter`: Limit of iterations.
-* `max_iter_mp`: Limit of iterations in Matching Pursuit that `ksvd` calls at
-    every iteration.
-```
 """
-function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
-                             sparsity_allowance = 1.0,
-                             ksvd_method = OptimizedKSVD(),
-                             sparse_coding_method = MatchingPursuit(),
-                             max_iter::Int = 10,
-                             trace_convergence = false,
-                             show_progress=true,
-                             verbose=false
-                             ) where T
+function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=n_atoms÷10;
+              ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
+              sparse_coding_method = ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+              verbose=false,
+              # termination conditions
+              maxiters::Int=100, #: The maximum number of iterations to perform. Defaults to 100.
+              maxtime::Union{Nothing, <:Real}=nothing,# : The maximum time for solving the nonlinear system of equations. Defaults to nothing which means no time limit. Note that setting a time limit does have a small overhead.
+              abstol::Number=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The absolute tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
+              reltol::Number=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The relative tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
+              nnz_per_col_target::Int=0,
+              # tracing options
+              show_trace::Bool=false,
+              # store_trace::Bool,
+              ) where T
     timer = TimerOutput()
-    K = n_atoms
-    n, N = size(Y)
-
-    if !(0 <= sparsity_allowance <= 1)
-        throw(ArgumentError("`sparsity_allowance` must be in range [0,1]"))
-    end
-
-    X = spzeros(T, K, N)  # just for making X global in this function
-    min_n_zeros = ceil(Int, sparsity_allowance * length(X))
+    emb_dim, n_samples = size(Y)
 
     # D is a dictionary matrix that contains atoms for columns.
-    @timeit timer "Init dict" D = init_dictionary(T, n, K)  # size(D) == (n, K)
-    @assert all(≈(1.0), norm.(eachcol(D)))
+    @timeit_debug timer "Init dict" begin
+        D = init_dictionary(T, emb_dim, n_atoms)  # size(D) == (n, K)
+        @assert all(≈(1.0), norm.(eachcol(D)))
+    end
+    X = sparse(zeros(T, 0, 0))  # to assign to later
 
-    p = Progress(max_iter)
-    maybe_init_buffers!(ksvd_method, n, K, N; pct_nz=1.0)
+    # progressbar = Progress(maxiter)
+    maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, n_samples)
 
-    for _ in 1:max_iter
+    norm_results, nnz_per_col_results = Float64[], Float64[];
+    # if store_trace || show_trace
+    trace_channel = Channel{Tuple{Matrix{T}, SparseMatrixCSC{T, Int64}}}(; spawn=true) do ch
+        for (D, X) in ch
+            norm_val = norm(Y - D*X)
+            nnz_per_col_val = nnz(X) / size(X, 2)
+            show_trace && @info norm_val, nnz_per_col_val
+            (push!(norm_results, norm_val); push!(nnz_per_col_results, nnz_per_col_val))
+        end
+    end
+
+    termination_condition = :nothing
+    tic = time()
+    for iter in 1:maxiters
         verbose && @info "Starting sparse coding"
         X = sparse_coding(sparse_coding_method, Y, D; timer)
         verbose && @info "Starting svd"
-        D, X = ksvd_update(ksvd_method, Y, D, X; timer)
-        trace_convergence && Threads.@spawn (@info "loss=$(norm(Y - D*X)), nnz_col=$(mean(sum.(!iszero, eachcol(X))))")
+        D, X = ksvd_update(ksvd_update_method, Y, D, X; timer)
 
-        # return if the number of zero entries are <= max_n_zeros
-        if sum(iszero, X) > min_n_zeros
-            show(timer)
-            return D, X
+        # put a task to compute the trace / termination conditions.
+        push!(trace_channel, (copy(D), copy(X)))
+
+        # Check termination conditions.
+        # Notice that this is typically not using the most recent results yet. So we might only later realize that we
+        # should terminate.
+        if iter == maxiters
+            termination_condition = :maxiter; break
+        elseif !isnothing(maxtime) && (time() - tic) > maxtime
+            termination_condition = :maxtime; break
+        elseif length(norm_results) > 1 && isapprox(norm_results[end], norm_results[end-1]; atol=abstol, rtol=reltol)
+            termination_condition = :converged; break
+        elseif !isempty(nnz_per_col_results) && last(nnz_per_col_results) <= nnz_per_col_target
+            termination_condition = :nnz_per_col_target
         end
-        show_progress && next!(p)
     end
-    show(timer)
-    return D, X
+    TimerOutputs.complement!(timer)
+    return (; D, X, norm_results, nnz_per_col_results, termination_condition, timer)
 end
 
 const dictionary_learning = ksvd  # for compatibility

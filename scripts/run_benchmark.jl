@@ -24,15 +24,15 @@ Vs = rand!(rng, similar(Js, T)) .+ 1
 X_true = sparse(Is, Js, Vs, K, N)
 Y = basis * X_true
 
-ksvd_method = let
+ksvd_update_method = let
   ksvd_method = KSVD.BatchedParallelKSVD{true, Float64, SerialScheduler}()
   KSVD.maybe_init_buffers!(ksvd_method, size(Y, 1), size(basis, 2), size(Y, 2); pct_nz=0.03)
   ksvd_method
 end;
 
-ksvd_update(ksvd_method, Y[:, 1:1000], copy(basis), X_true[:, 1:1000])
+ksvd_update(ksvd_update_method, Y[:, 1:1000], copy(basis), X_true[:, 1:1000])
 timer = TimerOutput();
-ksvd_update(ksvd_method, Y[:, 1:100_000], copy(basis), X_true[:, 1:100_000];
+ksvd_update(ksvd_update_method, Y[:, 1:100_000], copy(basis), X_true[:, 1:100_000];
             timer=timer, merge_all_timers=true)
 TimerOutputs.complement!(timer)
 
