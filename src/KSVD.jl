@@ -39,14 +39,50 @@ end
 
 
 """
-    ksvd(Y::AbstractMatrix, n_atoms::Int, max_nnz=max(n_atoms÷10, 1);
-         sparsity_allowance::Float64 = 0.1,
-         maxiter::Int = 10)
+    ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(n_atoms÷10, 1);
+         ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
+         sparse_coding_method = ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+         verbose=false,
+         maxiters::Int=100,
+         maxtime::Union{Nothing, <:Real}=nothing,
+         abstol::Number=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
+         reltol::Number=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
+         nnz_per_col_target::Int=0,
+         show_trace::Bool=false) where T
 
-Run K-SVD that designs an efficient dictionary D for sparse representations,
-and returns X such that DX = Y or DX ≈ Y.
-
+Run K-SVD algorithm to design an efficient dictionary D for sparse representations.
+Returns dictionary `D` and sparse assignment matrix `X` such that Y ≈ DX.
+Also returns loss trace and, if requested, timing results (see Notes below).
 Y is expected to be `(num_features x num_samples)`.
+Dictionary vectors will be normalized such that ~all(norm.(eachcol(D), 2) .≈ 1)~.
+
+# Arguments
+- `Y::AbstractMatrix{T}`: Input data matrix of size (num_features x num_samples)
+- `n_atoms::Int`: Number of atoms (columns) in the dictionary
+- `max_nnz=max(n_atoms÷10, 1)`: Maximum number of non-zero coefficients in each sparse representation
+
+# Keyword Arguments
+- `ksvd_update_method`: Method used for updating the dictionary (default: BatchedParallelKSVD)
+- `sparse_coding_method`: Method used for sparse coding (default: ParallelMatchingPursuit)
+- `verbose::Bool=false`: If true, print verbose output
+- `maxiters::Int=100`: Maximum number of iterations
+- `maxtime::Union{Nothing, <:Real}=nothing`: Maximum time limit (in seconds)
+- `abstol::Number`: Absolute tolerance for convergence
+- `reltol::Number`: Relative tolerance for convergence
+- `nnz_per_col_target::Int=0`: Target number of non-zero entries per column
+- `show_trace::Bool=false`: If true, show trace of the optimization
+
+# Returns
+A named tuple containing:
+- `D`: The learned dictionary
+- `X`: The sparse representation matrix
+- `norm_results`: Array of norm values for each iteration
+- `nnz_per_col_results`: Array of non-zero entries per column for each iteration
+- `termination_condition`: The condition that caused termination
+- `timer`: Timing information for various parts of the algorithm
+
+# Notes
+To enable timing outputs, run `TimerOutputs.enable_debug_timings(KSVD)`.
 """
 function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=n_atoms÷10;
               ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
