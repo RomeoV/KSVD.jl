@@ -25,23 +25,33 @@ D is a dictionary. Each column of D represents an atom.
 K-SVD derives D and X such that DX ≈ Y from only Y.  
 
 ```julia
-D, X = ksvd(Y, 256)
+(; D, X) = ksvd(Y, 256)
 
 # we can control the matching pursuit stage and ksvd stage through method structs
-ksvd_update_method = BatchedParallelKSVD()
-mp_Method = ParallelMatchingPursuit()
-D, X = ksvd(Y, 256;
-                           ksvd_method=ksvd_method,
-                           sparse_coding_method=mp_method)
+ksvd_update_method = BatchedParallelKSVD{false, Float64}(shuffle_indices=true, batch_size_per_thread=1)
+sparse_coding_method = ParallelMatchingPursuit(max_nnz=25, rtol=5e-2)
+result = ksvd(Y, 256;
+              ksvd_update_method,
+              sparse_coding_method,
+              maxiters=100,
+              abstol=1e-6,
+              reltol=1e-6,
+              show_trace=true)
+
+# Access additional information
+println("Termination condition: ", result.termination_condition)
+println("Norm results: ", result.norm_results)
+println("NNZ per column results: ", result.nnz_per_col_results)
+println("Timing information: ", result.timer)
 ```
 
 Of course we can also just run one step of matching pursuit/sparse coding, or one step of the ksvd update:
 
-``` julia
+```julia
 basis = KSVD.init_dictionary(size(Y, 1), 2*size(Y,2))
-X::SparseMatrix = sparse_coding(mp_method, Y, basis
+X = sparse_coding(OrthogonalMatchingPursuit(max_nnz=25), Y, basis)
 
-D::Matrix, X::SparseMatrix = ksvd_update(ksvd_method, Y, basis, X)
+(; D, X) = ksvd_update(ksvd_update_method, Y, basis, X)
 ```
 
 [Matching Pursuit](https://en.wikipedia.org/wiki/Matching_pursuit) derives X from D and Y such that DX = Y in constraint that X be as sparse as possible.
