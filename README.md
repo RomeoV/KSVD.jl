@@ -18,14 +18,6 @@ This includes:
 - Extensive benchmark-driven optimizations utilizing [`ProfileView.jl`](https://github.com/timholy/ProfileView.jl)
 - Many other modification experiments.
 
-# Installation
-Package registration is WIP (https://github.com/JuliaRegistries/General/pull/98593).
-Until then, you can add this package like so:
-
-```julia
-] add https://github.com/RomeoV/KSVD.jl
-```
-
 # Usage
 
 Assume that each column of Y represents a feature vector (or an input signal from some system).  
@@ -36,7 +28,7 @@ K-SVD derives D and X such that DX ≈ Y from only Y.
 D, X = ksvd(Y, 256)
 
 # we can control the matching pursuit stage and ksvd stage through method structs
-ksvd_method = BatchedParallelKSVD()
+ksvd_update_method = BatchedParallelKSVD()
 mp_Method = ParallelMatchingPursuit()
 D, X = ksvd(Y, 256;
                            ksvd_method=ksvd_method,
