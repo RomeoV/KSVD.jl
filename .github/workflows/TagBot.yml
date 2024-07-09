@@ -13,7 +13,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ssh: ${{ secrets.DOCUMENTER_KEY }}
-          lookback: 200
 permissions:
   actions: read
   checks: read
