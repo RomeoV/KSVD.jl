@@ -1,5 +1,5 @@
 import Random: shuffle
-import SparseArrays: nzvalview, nonzeroinds
+import SparseArrays: nzvalview, nonzeroinds, nonzeros
 import OhMyThreads
 import OhMyThreads: tforeach
 # import OhMyThreads: SerialScheduler
@@ -31,9 +31,9 @@ by only having to compute the last part, and "resetting it" after using the resu
 """
 function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
                      force_reinitialize_buffers::Bool=false, timer=TimerOutput(), merge_all_timers=true) where T
-    @timeit timer "KSVD update" begin
+    @timeit_debug timer "KSVD update" begin
 
-    if force_reinitialize_buffers || !is_initialized(method) "Before using $method please call `maybe_initialize_buffers!(...)`"
+    if force_reinitialize_buffers || !is_initialized(method)
         maybe_init_buffers!(method, size(D, 1), size(D, 2), size(Y, 2), timer)
     end
 
@@ -46,8 +46,8 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
     # this is a no-op if the template `precompute_error` is false.
     E = maybe_prepare_error_buffer!(method, Y, D, X; timer)
 
-    timer_ch = Channel{TimerOutput}(nchunks(method))
-    foreach(to->put!(timer_ch, to), [TimerOutput() for _ in 1:nchunks(method)])
+    timer_ch = Channel{TimerOutput}(length(method.E_Ω_bufs))
+    foreach(to->put!(timer_ch, to), [TimerOutput() for _ in 1:length(method.E_Ω_bufs)])
 
     E_Ω_buf_ch = Channel{Matrix{T}}(length(method.E_Ω_bufs))
     foreach(buf->put!(E_Ω_buf_ch, buf), method.E_Ω_bufs)
@@ -57,6 +57,8 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
     # into more sub-batches.
     index_batches = make_index_batches(method, axes(X, 1))
     scheduler = get_scheduler_t(method)()  # we do our own chunking
+
+    @timeit_debug timer "Inner loop" begin
     @inbounds for index_batch in index_batches  # <- This is just one big batch for `ParallelKSVD`
         tforeach(index_batch; scheduler) do k
             # we use channels to manage the batch-local variables
@@ -72,10 +74,11 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
         end
         ksvd_update_X!(X, X_cpy, index_batch, timer)
     end
+    end  # @timeit
 
     close(timer_ch)
     if KSVD.timeit_debug_enabled()
-        merge!(timer, (merge_all_timers ? collect(timer_ch) : [first(timer_ch)])...; tree_point=["KSVD update"])
+        merge!(timer, (merge_all_timers ? collect(timer_ch) : [first(timer_ch)])...; tree_point=["KSVD update", "Inner loop"])
     end
 
     end # @timeit
@@ -90,7 +93,11 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
     @timeit_debug timer "find nonzeros" begin
         xₖ = X[k, :]
         if all(iszero, xₖ)
-            D_cpy[:, k] .= D[:, k];
+            # If this dictionary vector had no matches at all, reinitialize it with a new random vector.
+            # We write to `D_cpy`, which will later get copied into `D`.
+            randn!(@view(D_cpy[:, k]))
+            normalize!(@view(D_cpy[:, k]), 2)
+            # D_cpy[:, k] .= D[:, k];
             return
         end
         # ωₖ = findall(!iszero, xₖ)
@@ -154,14 +161,18 @@ function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{false}, E_Ω_buf, E, Y, D, X,
         E_Ω .= @view Y[:, ωₖ]
         # E_Ω .= Y[:, ωₖ]
     end
-    @timeit_debug timer "compute matrix vector product" begin
+    @timeit_debug timer "compute dense sparse matrix product" begin
         # # Note: Make sure not to use `@view` on `X`, see https://github.com/JuliaSparse/SparseArrays.jl/issues/475
         # fastdensesparsemul!(E_Ω, D, X[:, ωₖ], -1, 1)
+        # this is actually slightly faster than our version
         E_Ω .-= D*X[:, ωₖ]
+        # Benchmark results: multiply dominates, the indexing `X[:, ωₖ]` is almost free
     end
-    @timeit_debug timer "compute outer product" begin
+    @timeit_debug timer "compute dense sparse outer product" begin
+        E_Ω .+= @view(D[:, k]) * nonzeros(xₖ)'
         # E_Ω .+= D[:, k] * xₖ[ωₖ]'
-        fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], true, true)
+        # fastdensesparsemul_outer!(E_Ω, @view(D[:, k]), xₖ[ωₖ], true, true)
+        # Benchmark results: multiply dominates, the indexing `xₖ[ωₖ]` is almost free
     end
     ## <END OPTIMIZED BLOCK>
 
@@ -178,12 +189,13 @@ function maybe_prepare_error_buffer!(method::ThreadedKSVDMethodPrecomp{true}, Y,
         E .= Y
     end
     @timeit_debug timer "Compute error buffer" begin
-        E .-= D*X
-        # fastdensesparsemul_threaded!(E, D, X, -1, 1)
+        # E .-= D*X
+        fastdensesparsemul_threaded!(E, D, X, -1, 1)
     end
 end
 
 
+# no-op when we don't precompute the errors.
 function maybe_update_errors!(::ThreadedKSVDMethodPrecomp{false}, E, D_cpy, X_cpy, D, X, index_batch; timer=TimerOutput()) end
 function maybe_update_errors!(::ThreadedKSVDMethodPrecomp{true}, E, D_cpy, X_cpy, D, X, index_batch; timer=TimerOutput())
     @timeit_debug timer "Update errors" begin
@@ -192,8 +204,14 @@ function maybe_update_errors!(::ThreadedKSVDMethodPrecomp{true}, E, D_cpy, X_cpy
         # # Original:
         # E .+= @view(D[:, index_batch]) * X[index_batch, :] - @view(D_cpy[:, index_batch]) * X_cpy[index_batch, :]
         # # Optimized:
-        fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), X[index_batch, :], 1, 1)
-        fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), X_cpy[index_batch, :], -1, 1)
+        @timeit_debug timer "extract Xs" begin
+            x_batch = X[index_batch, :]
+            x_cpy_batch = X_cpy[index_batch, :]
+        end
+        @timeit_debug timer "dense-sparse mul" begin
+            fastdensesparsemul_threaded!(E, @view(D[:, index_batch]), x_batch, 1, 1)
+            fastdensesparsemul_threaded!(E, @view(D_cpy[:, index_batch]), x_cpy_batch, -1, 1)
+        end
         ##<END OPTIMIZED BLOCK>
     end
 end
