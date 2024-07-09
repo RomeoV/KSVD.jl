@@ -4,10 +4,7 @@ version = "1.1.0"
 
 [deps]
 ChunkSplitters = "ae650224-84b6-46f8-82ea-d812ca08434e"
-Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
-DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
@@ -22,20 +19,27 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
+DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
 
 # [extensions]
 # KSVDCudaExt = ["CUDA"]
 # KSVDDistributedExt = ["Distributed"]
 
 [compat]
+ChunkSplitters = "2"
 DataStructures = "0.18"
 Distributions = "0.22 - 0.25"
+OhMyThreads = "0.5"
 ProgressMeter = "1"
 SparseArrays = "1.9"
+StatsBase = "0.30 - 0.35"
 TSVD = "0.4"
-ThreadedDenseSparseMul = "0.4"
+ThreadedDenseSparseMul = "0.4, 0.5"
 TimerOutputs = "0.5"
 julia = "1.9"
+
 
 [extras]
 ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
