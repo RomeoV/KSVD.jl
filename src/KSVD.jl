@@ -145,7 +145,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=n_atoms÷10;
         elseif length(norm_results) > 1 && isapprox(norm_results[end], norm_results[end-1]; atol=abstol, rtol=reltol)
             termination_condition = :converged; break
         elseif !isempty(nnz_per_col_results) && last(nnz_per_col_results) <= nnz_per_col_target
-            termination_condition = :nnz_per_col_target
+            termination_condition = :nnz_per_col_target; break
         end
     end
     TimerOutputs.complement!(timer)
