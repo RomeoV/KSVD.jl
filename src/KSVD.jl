@@ -91,8 +91,8 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=n_atoms÷10;
               # termination conditions
               maxiters::Int=100, #: The maximum number of iterations to perform. Defaults to 100.
               maxtime::Union{Nothing, <:Real}=nothing,# : The maximum time for solving the nonlinear system of equations. Defaults to nothing which means no time limit. Note that setting a time limit does have a small overhead.
-              abstol::Number=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The absolute tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
-              reltol::Number=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The relative tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
+              abstol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The absolute tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
+              reltol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The relative tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
               nnz_per_col_target::Number=0.0,
               # tracing options
               show_trace::Bool=false,
@@ -152,7 +152,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=n_atoms÷10;
             termination_condition = :maxiter; break
         elseif !isnothing(maxtime) && (time() - tic) > maxtime
             termination_condition = :maxtime; break
-        elseif length(norm_results) > 1 && isapprox(norm_results[end], norm_results[end-1]; atol=abstol, rtol=reltol)
+        elseif (!isnothing(abstol) && !isnothing(reltol)) && length(norm_results) > 1 && isapprox(norm_results[end], norm_results[end-1]; atol=abstol, rtol=reltol)
             termination_condition = :converged; break
         elseif !isempty(nnz_per_col_results) && last(nnz_per_col_results) <= nnz_per_col_target
             termination_condition = :nnz_per_col_target; break
