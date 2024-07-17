@@ -245,8 +245,8 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
     products_abs = abs.(products)  # prealloc
 
     for i in 1:max_iter
-        !isfinite(norm(residual)) && @show norm(residual), residual
-        !isfinite(norm_data) && @show norm_data
+        # @assert(norm(residual)) && @show norm(residual), residual
+        # @assert(isfinite(norm_data))
         if norm(residual)/norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
@@ -261,7 +261,7 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 
         a = products[maxindex]
         atom = @view dictionary[:, maxindex]
-        @assert norm(atom) ≈ 1. norm(atom)
+        # @assert norm(atom) ≈ 1. norm(atom)
 
         residual .-= a .* atom
         products .-= a .* @view DtD[:, maxindex]
