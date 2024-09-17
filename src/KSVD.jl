@@ -85,7 +85,7 @@ To enable timing outputs, run `TimerOutputs.enable_debug_timings(KSVD)`.
 """
 function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
               ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
-              sparse_coding_method = ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+              sparse_coding_method = ParallelMatchingPursuit(; max_nnz=n_atoms÷10, rtol=5e-2),
               minibatch_size=nothing,
               D_init::Union{Nothing, <:AbstractMatrix{T}} = nothing,
               # termination conditions
