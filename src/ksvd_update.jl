@@ -63,19 +63,9 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
         tforeach(index_batch; scheduler) do k
             # we use channels to manage the batch-local variables
             E_Ω_buf = take!(E_Ω_buf_ch); timer_ = take!(timer_ch)
-            try
-                ksvd_update_k!(method, E_Ω_buf, D_cpy, X_cpy, E, Y, D, X, k, timer_)
-            catch e
-                if e isa LinearAlgebra.LAPACKException
-                    @warn "Handle LAPACKException by adding a bit of noise."
-                    D_cpy[:, k]  .+= sqrt(eps(T))*randn(size(D_cpy, 1))
-                    normalize!(D_cpy[:, k])
-                else
-                    throw(e)
-                end
-            finally
-                put!(E_Ω_buf_ch, E_Ω_buf); put!(timer_ch, timer_)
-            end
+            try; ksvd_update_k!(method, E_Ω_buf, D_cpy, X_cpy, E, Y, D, X, k, timer_)
+            catch e; handle_ksvd_update_error(e, D_cpy, k); end
+            put!(E_Ω_buf_ch, E_Ω_buf); put!(timer_ch, timer_)
         end
 
         maybe_update_errors!(method, E, D_cpy, X_cpy, D, X, index_batch; timer)
@@ -241,3 +231,11 @@ function maybe_update_errors!(::ThreadedKSVDMethodPrecomp{true}, E, D_cpy, X_cpy
         ##<END OPTIMIZED BLOCK>
     end
 end
+
+
+function handle_ksvd_update_error(::LinearAlgebra.LAPACKException, D_cpy, k)
+    @warn "Handling LAPACKException by adding a bit of noise to one dictionary."
+    D_cpy[:, k]  .+= sqrt(eps(eltype(D_cpy)))*randn(size(D_cpy, 1))
+    normalize!(@view(D_cpy[:, k]), 2)
+end
+handle_ksvd_update_error(e::Exception, _D_cpy, _k) = throw(e)
