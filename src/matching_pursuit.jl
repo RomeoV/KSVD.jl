@@ -6,7 +6,7 @@ using OhMyThreads: tmap
 import SparseArrays: nonzeroinds
 
 const default_max_nnz = 10
-const default_rtol = 1e-2
+const default_rtol = 5e-2
 
 abstract type SparseCodingMethod end
 """ 'Baseline' single threaded but optimized implementation.
