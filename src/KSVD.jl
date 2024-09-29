@@ -39,9 +39,9 @@ end
 
 
 """
-    ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(n_atoms÷10, 1);
+    ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
          ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
-         sparse_coding_method = ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+         sparse_coding_method = ParallelMatchingPursuit(; max_nnz=max(n_atoms÷10, 1), rtol=5e-2),
          verbose=false,
          maxiters::Int=100,
          maxtime::Union{Nothing, <:Real}=nothing,
@@ -52,9 +52,11 @@ end
 
 Run K-SVD algorithm to design an efficient dictionary D for sparse representations.
 Returns dictionary `D` and sparse assignment matrix `X` such that Y ≈ DX.
-Also returns loss trace and, if requested, timing results (see Notes below).
 Y is expected to be `(num_features x num_samples)`.
-Dictionary vectors will be normalized such that ~all(norm.(eachcol(D), 2) .≈ 1)~.
+To set the number of nonzeros, set the `sparse_coding_method` (see Notes below).
+
+Can also return losses and detailed timing results (see Notes below), and take a callback
+function, e.g. to compute other losses or store intermediate solutions.
 
 # Arguments
 - `Y::AbstractMatrix{T}`: Input data matrix of size (num_features x num_samples)
@@ -81,7 +83,9 @@ A named tuple containing:
 - `timer`: Timing information for various parts of the algorithm
 
 # Notes
-To enable timing outputs, run `TimerOutputs.enable_debug_timings(KSVD)`.
+- Dictionary vectors are normalized such that ~all(norm.(eachcol(D), 2) .≈ 1)~.
+- To enable timing outputs, run `TimerOutputs.enable_debug_timings(KSVD)`.
+- To set the number of nonzeros, specify e.g. `sparse_coding_method=ParallelMatchingPursuit(; max_nnz=..., rtol=5e-2)`.
 """
 function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
               ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
@@ -89,10 +93,10 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
               minibatch_size=nothing,
               D_init::Union{Nothing, <:AbstractMatrix{T}} = nothing,
               # termination conditions
-              maxiters::Int=100, #: The maximum number of iterations to perform. Defaults to 100.
-              maxtime::Union{Nothing, <:Real}=nothing,# : The maximum time for solving the nonlinear system of equations. Defaults to nothing which means no time limit. Note that setting a time limit does have a small overhead.
-              abstol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The absolute tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
-              reltol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5), #: The relative tolerance. Defaults to real(oneunit(T)) * (eps(real(one(T))))^(1 // 2).
+              maxiters::Int=100,
+              maxtime::Union{Nothing, <:Real}=nothing,
+              abstol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
+              reltol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
               nnz_per_col_target::Number=0.0,
               # tracing options
               show_trace::Bool=false,
