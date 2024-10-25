@@ -8,6 +8,7 @@ DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
@@ -18,14 +19,10 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
-Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
+Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
-
-# [extensions]
-# KSVDCudaExt = ["CUDA"]
-# KSVDDistributedExt = ["Distributed"]
 
 [compat]
 ChunkSplitters = "2"
@@ -39,7 +36,6 @@ TSVD = "0.4"
 ThreadedDenseSparseMul = "0.4, 0.5"
 TimerOutputs = "0.5"
 julia = "1.9"
-
 
 [extras]
 ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
