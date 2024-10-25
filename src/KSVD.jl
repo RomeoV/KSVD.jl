@@ -23,6 +23,7 @@ import TimerOutputs
 import TimerOutputs: @timeit_debug
 import StatsBase: mean
 import ProgressMeter: Progress
+using PrecompileTools: @compile_workload
 
 
 include("set_num_threads.jl")
@@ -171,5 +172,10 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
 end
 
 const dictionary_learning = ksvd  # for compatibility
+
+@compile_workload begin
+    ksvd(rand(Float32, 10, 20), 15; maxiters=2)
+    ksvd(rand(Float64, 10, 20), 15; maxiters=2)
+end
 
 end # module
