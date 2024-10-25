@@ -120,7 +120,9 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
 
     norm_results, nnz_per_col_results = Float64[], Float64[];
     # if store_trace || show_trace
-    trace_channel = Channel{Tuple{Int, Matrix{T}, SparseMatrixCSC{T, Int64}}}(maxiters; spawn=true) do ch
+    trace_taskref = Ref{Task}()
+    CH_T = Tuple{Int, Matrix{T}, SparseMatrixCSC{T, Int64}}
+    trace_channel = Channel{CH_T}(maxiters; spawn=true, taskref=trace_taskref) do ch
         for (iter, D, X) in ch
             norm_val = norm.(eachcol(Y - D*X)) |> mean
             nnz_per_col_val = nnz(X) / size(X, 2)
@@ -162,7 +164,9 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
             termination_condition = :nnz_per_col_target; break
         end
     end
+    close(trace_channel)
     TimerOutputs.complement!(timer)
+    wait(trace_taskref[])  # make sure trace has finished
     return (; D, X, norm_results, nnz_per_col_results, termination_condition, timer)
 end
 
