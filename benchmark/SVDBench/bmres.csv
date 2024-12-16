@@ -1,0 +1,59 @@
+"method","eltype","median_runtime","m"
+"IterativeSolvers.svdl",Float64,0.00014123,10
+"Arpack.svds",Float64,5.26355e-5,10
+"TSVD.tsvd",Float64,0.0001214365,10
+"KrylovKit.svdsolve",Float64,8.45055e-5,10
+"ArnoldiMethod.partialeigen",Float64,0.0045563949999999995,10
+"ArnoldiMethod.partialeigen (lazy)",Float64,0.000216061,10
+"IterativeSolvers.svdl",Float64,0.0036689485,100
+"Arpack.svds",Float64,0.0009210015,100
+"TSVD.tsvd",Float64,0.00328079,100
+"KrylovKit.svdsolve",Float64,0.0015819270000000001,100
+"ArnoldiMethod.partialeigen",Float64,0.010744591000000001,100
+"ArnoldiMethod.partialeigen (lazy)",Float64,0.0011776405,100
+"IterativeSolvers.svdl",Float64,0.26555714350000004,1000
+"Arpack.svds",Float64,0.025015317000000002,1000
+"TSVD.tsvd",Float64,0.031765811500000005,1000
+"KrylovKit.svdsolve",Float64,0.026645571000000003,1000
+"ArnoldiMethod.partialeigen",Float64,0.033586028000000004,1000
+"ArnoldiMethod.partialeigen (lazy)",Float64,0.024992417500000003,1000
+"IterativeSolvers.svdl",Float64,14.470113056,10000
+"Arpack.svds",Float64,1.0711729060000001,10000
+"TSVD.tsvd",Float64,0.651176985,10000
+"KrylovKit.svdsolve",Float64,0.8402333120000001,10000
+"ArnoldiMethod.partialeigen",Float64,0.220189464,10000
+"ArnoldiMethod.partialeigen (lazy)",Float64,0.8984389290000001,10000
+"Arpack.svds",Float64,12.196320640000001,100000
+"TSVD.tsvd",Float64,8.822237993,100000
+"KrylovKit.svdsolve",Float64,10.970387145,100000
+"ArnoldiMethod.partialeigen",Float64,2.11173987,100000
+"ArnoldiMethod.partialeigen (lazy)",Float64,9.058281496000001,100000
+"IterativeSolvers.svdl",Float32,0.000147499,10
+"Arpack.svds",Float32,5.5666000000000005e-5,10
+"TSVD.tsvd",Float32,0.00010516050000000001,10
+"KrylovKit.svdsolve",Float32,0.000274012,10
+"ArnoldiMethod.partialeigen",Float32,0.002513762,10
+"ArnoldiMethod.partialeigen (lazy)",Float32,0.00012059350000000001,10
+"IterativeSolvers.svdl",Float32,0.0024456475,100
+"Arpack.svds",Float32,0.0006459570000000001,100
+"TSVD.tsvd",Float32,0.002739796,100
+"KrylovKit.svdsolve",Float32,0.0010526405000000003,100
+"ArnoldiMethod.partialeigen",Float32,0.005324884,100
+"ArnoldiMethod.partialeigen (lazy)",Float32,0.0005938,100
+"IterativeSolvers.svdl",Float32,0.1089120385,1000
+"Arpack.svds",Float32,0.012761896000000002,1000
+"TSVD.tsvd",Float32,0.0186524765,1000
+"KrylovKit.svdsolve",Float32,0.014546467,1000
+"ArnoldiMethod.partialeigen",Float32,0.016876774,1000
+"ArnoldiMethod.partialeigen (lazy)",Float32,0.010944901,1000
+"IterativeSolvers.svdl",Float32,4.115350269,10000
+"Arpack.svds",Float32,0.41760809000000004,10000
+"TSVD.tsvd",Float32,0.306979834,10000
+"KrylovKit.svdsolve",Float32,0.25828371,10000
+"ArnoldiMethod.partialeigen",Float32,0.11638995700000002,10000
+"ArnoldiMethod.partialeigen (lazy)",Float32,0.190042236,10000
+"Arpack.svds",Float32,4.929866706,100000
+"TSVD.tsvd",Float32,4.231733196,100000
+"KrylovKit.svdsolve",Float32,7.221358035000001,100000
+"ArnoldiMethod.partialeigen",Float32,1.292080031,100000
+"ArnoldiMethod.partialeigen (lazy)",Float32,3.1239566570000004,100000
