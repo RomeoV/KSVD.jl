@@ -1,5 +1,3 @@
-# -*- julia-snail-port: 10034; -*-
-using CUDA
 struct BatchedDeviceOpWorkspace{T}
     batchsize::Int
     n_bufs::Int
@@ -12,8 +10,9 @@ struct BatchedDeviceOpWorkspace{T}
         [CUDA.pin(Matrix{T}(undef, sz_out, batchsize)) for _ in 1:n_bufs],
         [CuMatrix{T}(undef, sz_in, batchsize) for _ in 1:n_bufs])
 end
+BatchedDeviceOpWorkspace(batchsize, sz_in::Int, sz_out::Int) = BatchedDeviceOpWorkspace(Float32, batchsize, sz_in, sz_out)
 
-batched_device_op(op, M::Matrix) = let
+function make_batched_device_op_workspace(op, M::Matrix)
     ten_MB = 10 * 1024^2
     # heuristic for batchsize
     # sizeof(T) * size(M, 1) * batchsize = ten_MB
@@ -21,12 +20,10 @@ batched_device_op(op, M::Matrix) = let
 
     batch_dev = cu(M[:, 1:min(100, size(M, 2))])
     sz_out = size(op(batch_dev), 1)
-    workspace = BatchedDeviceOpWorkspace(eltype(M), batchsize, size(M, 1), sz_out)
-
-    batched_device_op(op, workspace, M)
+    BatchedDeviceOpWorkspace(eltype(M), batchsize, size(M, 1), sz_out)
 end
 
-
+batched_device_op(op, M::Matrix) = batched_device_op(op, make_batched_device_op_workspace(op, M), M)
 function batched_device_op(op, workspace::BatchedDeviceOpWorkspace, M::Matrix{T}) where {T}
     CUDA.is_pinned(pointer(M)) || CUDA.pin(M)
     (; batchsize, n_bufs, M_dst, M_dev) = workspace
@@ -72,13 +69,14 @@ end
 """
 @test begin
 
-T = Float64
-Y = rand(T, 512, 4096*4)
-D = rand(T, 512, 512)
+T = Float32
+Y = rand(T, 2*512, 4096*32)
+D = rand(T, 2*512, 2*512)
 D_dev = CuMatrix(D)
 op(rhs::CuMatrix) = D_dev*rhs
 op(rhs::Matrix) = D*rhs
-ch, task = batched_device_op(op, Y)
+workspace = BatchedDeviceOpWorkspace(4096, 2*512, 2*512)
+ch, task = batched_device_op(op, workspace, Y)
 res = hcat(last.(sort(collect(ch); by=first))...);
 @test res ≈ D*Y
 @test res ≈ op(Y)
