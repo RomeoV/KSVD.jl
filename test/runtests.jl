@@ -13,4 +13,5 @@ end
 @testset "Run the whole thing" begin
     data = rand(100, 500)
     ksvd(data, 200)
+    @test true
 end

@@ -1,4 +1,4 @@
-maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); pct_nz=1.) = nothing
+maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); ratio_nonzero=1.) = nothing
 function maybe_init_buffers!(method::Union{ParallelKSVD{precompute_error, T}, BatchedParallelKSVD{precompute_error, T}},
                              emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); ratio_nonzero=1.) where {precompute_error, T<:Real}
     @timeit_debug timer "init buffers" begin

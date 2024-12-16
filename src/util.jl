@@ -67,7 +67,7 @@ end
 # gen() = sum(sample([0,1], ProbabilityWeights([0.99, 0.01]), 100_000))
 # histogram([gen() for _ in 1:1000])
 " Compute buffer size that is large enough with extremely high likelyhood."
-function compute_reasonable_buffer_size(N, pct_nz; failure_chance = eps())
+function compute_reasonable_buffer_size(N, pct_nz; failure_chance = 0)
     D = Binomial(N, pct_nz)
     quantile(D, 1-failure_chance)
 end

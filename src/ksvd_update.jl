@@ -4,7 +4,7 @@ import OhMyThreads
 import OhMyThreads: tforeach
 # import OhMyThreads: SerialScheduler
 import TimerOutputs: TimerOutput, @timeit
-import ChunkSplitters: chunks
+import OhMyThreads.ChunkSplitters: chunks
 import Base.Threads: nthreads, threadpool
 
 # set a default
@@ -141,7 +141,7 @@ function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{true}, E_Ω_buf, E, Y, D, X, 
 
     if size(E_Ω_buf, 2) <= length(ωₖ)
         @warn """
-        The preallocated error buffer is too small. Not all errors will be computed. This is probably because
+        The preallocated error buffer is too small: $(size(E_Ω_buf, 2)) vs $(length(ωₖ)). Not all errors will be computed. This is probably because
         `maybe_init_buffer!` has been called with a ratio_nonzero that's too small. Try setting it to `1`.
         """
         ωₖ = ωₖ[1:size(E_Ω_buf, 2)]
