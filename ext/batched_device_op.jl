@@ -26,7 +26,8 @@ batched_device_op(op, M::Matrix) = let
     batched_device_op(op, workspace, M)
 end
 
-function batched_device_op(op, workspace::BatchedDeviceOpWorkspace, M::Matrix)
+
+function batched_device_op(op, workspace::BatchedDeviceOpWorkspace, M::Matrix{T}) where {T}
     CUDA.is_pinned(pointer(M)) || CUDA.pin(M)
     (; batchsize, n_bufs, M_dst, M_dev) = workspace
     idx_batches = Iterators.partition(axes(M, 2), batchsize)
@@ -38,29 +39,29 @@ function batched_device_op(op, workspace::BatchedDeviceOpWorkspace, M::Matrix)
     dev_ch = Channel{CuMatrix{eltype(M)}}(n_bufs)
     put!.([dev_ch], M_dev)
 
-    ready_ch = Channel{Matrix{eltype(M)}}(n_bufs)
+    ready_ch = Channel{Pair{UnitRange{Int}, Matrix{eltype(M)}}}(n_bufs)
 
     op_task = Threads.@spawn begin
         Threads.@threads for idx_ in idx_batches |> collect
             # M_dev = CuMatrix{eltype(M)}(undef, size(M, 1), batchsize)
             idx = CartesianIndices((axes(M, 1), idx_))
-            M_dst = take!(dst_ch)  # this blocks until a pinned host buffer is available
-            M_dev = take!(dev_ch)
+            M_dst_buf = take!(dst_ch)  # this blocks until a pinned host buffer is available
+            M_dev_buf = take!(dev_ch)
 
-            copyto!(M_dev, idx_dev, M, idx)
-            res = op(M_dev)
-            copyto!(M_dst, res)
+            copyto!(M_dev_buf, idx_dev, M, idx)
+            res = op(M_dev_buf)
+            copyto!(M_dst_buf, res)
 
-            # WARNING: THIS CAN PUT THINGS IN THE WRONG ORDER
-            put!(ready_ch, M_dst)
-            put!(dev_ch, M_dev)
+            # We need to keep `idx_` as we may run into a race condition...
+            put!(ready_ch, idx_=>M_dst_buf)
+            put!(dev_ch, M_dev_buf)
         end
         close(ready_ch); close(dev_ch)
     end
 
-    results_ch = Channel{Matrix{Float64}}(n_bufs; spawn=true) do results_ch
-        foreach(ready_ch) do M_buf
-            put!(results_ch, copy(M_buf))
+    results_ch = Channel{Pair{UnitRange{Int}, Matrix{T}}}(n_bufs; spawn=true) do results_ch
+        foreach(ready_ch) do (idx, M_buf)
+            put!(results_ch, idx=>copy(M_buf))
             put!(dst_ch, M_buf)
         end
         close(dst_ch)
@@ -71,13 +72,16 @@ end
 """
 @test begin
 
-Y = rand(512, 4096*4)
-D = rand(512, 512)
-D_dev = cu(D)
+T = Float64
+Y = rand(T, 512, 4096*4)
+D = rand(T, 512, 512)
+D_dev = CuMatrix(D)
 op(rhs::CuMatrix) = D_dev*rhs
+op(rhs::Matrix) = D*rhs
 ch, task = batched_device_op(op, Y)
-res = hcat(collect(ch)...);
+res = hcat(last.(sort(collect(ch); by=first))...);
 @test res ≈ D*Y
+@test res ≈ op(Y)
 
 end
 """
