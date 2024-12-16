@@ -108,10 +108,12 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
 
     E_Ω = compute_E_Ω!(method, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer)
 
-    @timeit_debug timer "compute and copy tsvd" begin
+    @timeit_debug timer "compute and copy svd" begin
         # truncated svd has some problems for column matrices. so then we just do svd.
         # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
-        U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
+        # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
+        # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : arnoldi_svd(E_Ω, 1; tol=1e-10))
+        U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : krylov_svd(E_Ω, 1; tol=1e-10))
         # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
         D_cpy[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
         X_cpy[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])

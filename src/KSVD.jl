@@ -15,7 +15,6 @@ export LegacyKSVD, OptimizedKSVD, ParallelKSVD, BatchedParallelKSVD
 export LegacyMatchingPursuit, ParallelMatchingPursuit
 
 using Base.Threads, Random, SparseArrays, LinearAlgebra
-import TSVD: tsvd
 import LinearAlgebra: normalize!
 import ThreadedDenseSparseMul: fastdensesparsemul!, fastdensesparsemul_threaded!, fastdensesparsemul_outer!, fastdensesparsemul_outer_threaded!
 import OhMyThreads
@@ -25,11 +24,11 @@ import StatsBase: mean
 import ProgressMeter: Progress
 using PrecompileTools: @compile_workload
 
-
 include("set_num_threads.jl")
 include("util.jl")
 include("matching_pursuit.jl")
 include("ksvd_types.jl")
+include("krylov_svd.jl")
 include("ksvd_update.jl")
 include("ksvd_update_legacy.jl")
 include("ksvd_update_optimized.jl")

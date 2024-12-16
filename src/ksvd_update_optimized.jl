@@ -30,7 +30,8 @@ import SparseArrays: nonzeroinds
         E_Ω = @view E_Ω_buffer[:, 1:length(ωₖ)]
         E_Ω .= Eₖ[:, ωₖ]
 
-        U, S, V = (size(E_Ω, 2) < 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*eps(eltype(E_Ω))) )
+        # U, S, V = (size(E_Ω, 2) < 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*eps(eltype(E_Ω))) )
+        U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : krylov_svd(E_Ω, 1; tol=1e-10))
         D[:, k]  .=  sign(U[1,1])       .* @view(U[:, 1])
         X[k, ωₖ] .= (sign(U[1,1])*S[1]) .* @view(V[:, 1])
 
