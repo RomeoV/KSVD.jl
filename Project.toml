@@ -28,6 +28,7 @@ KSVDCudaExt = "CUDA"
 
 [compat]
 DataStructures = "0.18"
+Distances = "0.10"
 Distributions = "0.22 - 0.25"
 KrylovKit = "0.8"
 OhMyThreads = "0.5 - 0.8"
