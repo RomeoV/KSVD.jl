@@ -37,6 +37,12 @@ include("ksvd_update_threaded_utils.jl")
 function __init__()
     set_num_threads(Threads.nthreads())
 end
+ext = Base.get_extension(@__MODULE__, :KSVDCudaExt)
+if !isnothing(ext)
+    const CUDAAcceleratedMatchingPursuit = ext.CUDAAcceleratedMatchingPursuit
+    export CUDAAcceleratedMatchingPursuit
+end
+
 
 
 """
@@ -88,9 +94,9 @@ A named tuple containing:
 - To enable timing outputs, run `TimerOutputs.enable_debug_timings(KSVD)`.
 - To set the number of nonzeros, specify e.g. `sparse_coding_method=ParallelMatchingPursuit(; max_nnz=..., rtol=5e-2)`.
 """
-function ksvd(Y::AbstractMatrix{T}, n_atoms::Int;
+function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms÷100);
               ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
-              sparse_coding_method = ParallelMatchingPursuit(; max_nnz=n_atoms÷10, rtol=5e-2),
+              sparse_coding_method = ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
               minibatch_size=nothing,
               D_init::Union{Nothing, <:AbstractMatrix{T}} = nothing,
               # termination conditions

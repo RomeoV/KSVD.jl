@@ -54,29 +54,11 @@ For description of parameters see `MatchingPursuit`.
 end
 
 """
-    SparseCodingMethoddGPU
+    SparseCodingMethodGPU
 
 To be instantiated in extensions, e.g. `CUDAAccelMatchingPursuit`.
 """
 abstract type GPUAcceleratedMatchingPursuit <: SparseCodingMethod end;
-
-""" CUDA Accelerated version pipelining the dictionary * data computation
-on the gpu, and using the result on the cpu. Always performs batching, i.e. uses
-limited memory even for large number of samples (however not for large embedding dimension).
-
-For description of parameters see `MatchingPursuit`.
-Notice that this method never precomputes the full product matrix `D'*Y`. Instead
-batches of data with size number of samples `batch_size` are loaded, moved to the GPU, multiplied there,
-and the result is moved back to the cpu. This happens asynchronously, so that the memory movement
-CPU->GPU and GPU->CPU, aswell as the computation on the CPU, are pipelined using Julia's `Channel`s.
-"""
-@kwdef struct CUDAAcceleratedMatchingPursuit <: GPUAcceleratedMatchingPursuit
-    max_nnz::Int = KSVD.default_max_nnz
-    max_iter::Int = 4*max_nnz
-    rtol = KSVD.default_rtol
-    batch_size::Int = 1_000
-    CUDAAcceleratedMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
-end
 
 """ Original implementation by https://github.com/IshitaTakeshi/KSVD.jl.
 Useful for comparison and didactic purposes, but much much slower. """
@@ -105,7 +87,7 @@ get_method_map_fn(::OrthogonalMatchingPursuit) = tmap
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
 """
 function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit},
-                       data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput()) where {T}
+                       data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput(), DtD=nothing, DtY=nothing) where {T}
     @timeit_debug timer "Sparse coding" begin
 
     K = size(dictionary, 2)
@@ -113,10 +95,13 @@ function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, O
 
     map_fn = get_method_map_fn(method)
 
-    DtD = dictionary'*dictionary
+    @timeit_debug timer "Precompute DtD" begin
+        DtD = (isnothing(DtD) ? dictionary'*dictionary : DtD)
+    end
     # if the data is very large we might not want to precompute this.
     @timeit_debug timer "precompute products" begin
-        products = (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
+        products = (isnothing(DtY) ? (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
+                                   : DtY)
     end
 
     @timeit_debug timer "matching pursuit" begin
