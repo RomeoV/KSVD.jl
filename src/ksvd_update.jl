@@ -28,6 +28,8 @@ Note that this uses a major part of the computation time, and any speedup is wor
 For this reason, we use a specialized parallel implementation provided in the `ThreadedDenseSparseMul.jl` package.
 The result of this precomputation can later be used in the computation ` E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]`.
 by only having to compute the last part, and "resetting it" after using the result.
+
+# TODO: This should probably be called `ksvd_update!` and note that it modifies D and X!
 """
 function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
                      force_reinitialize_buffers::Bool=false, timer=TimerOutput(), merge_all_timers=false) where T
