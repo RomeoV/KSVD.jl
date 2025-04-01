@@ -1,7 +1,7 @@
 import Random: shuffle
 import SparseArrays: nzvalview, nonzeroinds, nonzeros
 import OhMyThreads
-import OhMyThreads: tforeach
+import OhMyThreads: tforeach, @allow_boxed_captures, @localize
 # import OhMyThreads: SerialScheduler
 import TimerOutputs: TimerOutput, @timeit
 import OhMyThreads.ChunkSplitters: chunks
@@ -74,6 +74,8 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
 
         @timeit_debug timer "copy D results" begin
             D[:, index_batch] .= @view D_cpy[:, index_batch]
+                # avoid boxing: https://juliafolds2.github.io/OhMyThreads.jl/stable/literate/boxing/boxing/#Non-race-conditon-boxed-variables
+                @localize E_Ω_buf_ch timer_ch E D_cpy X_cpy tforeach(index_batch; scheduler) do k
         end
         ksvd_update_X!(X, X_cpy, index_batch, timer)
     end
