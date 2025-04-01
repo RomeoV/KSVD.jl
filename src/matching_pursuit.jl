@@ -24,17 +24,17 @@ may use too much memory, e.g. if the data is too large to fit into memory (see `
 """
 @kwdef struct MatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
-    max_iter::Int = 4*max_nnz
+    max_iter::Int = 4 * max_nnz
     rtol = default_rtol
-    precompute_products=true
+    precompute_products = true
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
 @kwdef struct OrthogonalMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
-    max_iter::Int = 4*max_nnz
+    max_iter::Int = 4 * max_nnz
     rtol = default_rtol
-    precompute_products=true
+    precompute_products = true
     OrthogonalMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
@@ -47,9 +47,9 @@ For description of parameters see `MatchingPursuit`.
 """
 @kwdef struct ParallelMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
-    max_iter::Int = 4*max_nnz
+    max_iter::Int = 4 * max_nnz
     rtol = default_rtol
-    precompute_products=true
+    precompute_products = true
     ParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
@@ -64,14 +64,14 @@ abstract type GPUAcceleratedMatchingPursuit <: SparseCodingMethod end;
 Useful for comparison and didactic purposes, but much much slower. """
 @kwdef struct LegacyMatchingPursuit <: SparseCodingMethod
     max_nnz::Int = default_max_nnz
-    max_iter::Int = 4*max_nnz
+    max_iter::Int = 4 * max_nnz
     rtol = default_rtol
     LegacyMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 function validate_mp_args(max_nnz, max_iter, rtol, other_args...)
     max_nnz >= 1 || throw(ArgumentError("`max_nnz` must be > 0"))
     max_iter >= 1 || throw(ArgumentError("`max_iter` must be > 0"))
-    0. <= rtol <= 1. || throw(ArgumentError("`rtol` must be in [0,1]"))
+    0.0 <= rtol <= 1.0 || throw(ArgumentError("`rtol` must be in [0,1]"))
 end
 
 sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix; timer=TimerOutput()) = sparse_coding(ParallelMatchingPursuit(), data, dictionary; timer)
@@ -86,61 +86,64 @@ get_method_map_fn(::OrthogonalMatchingPursuit) = tmap
 
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
 """
-function sparse_coding(method::Union{MatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit},
-                       data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput(), DtD=nothing, DtY=nothing) where {T}
+function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,OrthogonalMatchingPursuit},
+    data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput(), DtD=nothing, DtY=nothing) where {T}
     @timeit_debug timer "Sparse coding" begin
 
-    K = size(dictionary, 2)
-    N = size(data, 2)
+        K = size(dictionary, 2)
+        N = size(data, 2)
 
-    map_fn = get_method_map_fn(method)
+        map_fn = get_method_map_fn(method)
 
-    @timeit_debug timer "Precompute DtD" begin
-        DtD = (isnothing(DtD) ? dictionary'*dictionary : DtD)
-    end
-    # if the data is very large we might not want to precompute this.
-    @timeit_debug timer "precompute products" begin
-        products = (isnothing(DtY) ? (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
-                                   : DtY)
-    end
+        @timeit_debug timer "Precompute DtD" begin
+            DtD = (isnothing(DtD) ? dictionary' * dictionary : DtD)
+        end
+        # if the data is very large we might not want to precompute this.
+        @timeit_debug timer "precompute products" begin
+            products = (isnothing(DtY) ? (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
+                        : DtY)
+        end
 
-    @timeit_debug timer "matching pursuit" begin
-        X_ = map_fn(czip(eachcol(data), eachcol(products))) do (datacol, productcol)
-            matching_pursuit_(
+        @timeit_debug timer "matching pursuit" begin
             X_ = let DtD = DtD  # avoid boxing: https://juliafolds2.github.io/OhMyThreads.jl/stable/literate/boxing/boxing/#Non-race-conditon-boxed-variables
+                map_fn(czip(eachcol(data), eachcol(products))) do (datacol, productcol)
+                matching_pursuit_(
                     method,
                     datacol,
                     dictionary,
                     DtD;
                     products_init=(method.precompute_products ? productcol : nothing)
-            )
-        end
-    end
-
-    @timeit_debug timer "cat sparse arrays" begin
-        # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
-        # I tried `hcat(X_...)` and `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` they were both very slow.
-        # This version seems to overcome the type inference issues and makes the code much faster.
-        # Note that there's a multithreaded version of this too here: https://github.com/RomeoV/KSVD.jl/blob/b3e089c925a9123692f766b2106934eebb13edcc/src/matching_pursuit.jl#L168-L183
-        X = let
-            I = Int[]; J = Int[]; V = T[]
-            for (i, v) in enumerate(X_)
-                append!(I, SparseArrays.nonzeroinds(v))
-                append!(J, fill(i, SparseArrays.nnz(v)))
-                append!(V, SparseArrays.nonzeros(v))
+                )
+                end
             end
-            sparse(I, J, V, K, N)
         end
-    end
+
+        @timeit_debug timer "cat sparse arrays" begin
+            # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
+            # I tried `hcat(X_...)` and `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` they were both very slow.
+            # This version seems to overcome the type inference issues and makes the code much faster.
+            # Note that there's a multithreaded version of this too here: https://github.com/RomeoV/KSVD.jl/blob/b3e089c925a9123692f766b2106934eebb13edcc/src/matching_pursuit.jl#L168-L183
+            X = let
+                I = Int[]
+                J = Int[]
+                V = T[]
+                for (i, v) in enumerate(X_)
+                    append!(I, SparseArrays.nonzeroinds(v))
+                    append!(J, fill(i, SparseArrays.nnz(v)))
+                    append!(V, SparseArrays.nonzeros(v))
+                end
+                sparse(I, J, V, K, N)
+            end
+        end
 
     end  # @timeit
     return X
 end
 
 @inbounds function matching_pursuit_(
-        method::Union{OrthogonalMatchingPursuit},
-        data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-        products_init::Union{Nothing, AbstractVector{T}}=nothing) where T
+    method::Union{OrthogonalMatchingPursuit},
+    data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
+    products_init::Union{Nothing,AbstractVector{T}}=nothing) where {T}
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
@@ -161,7 +164,7 @@ end
     mask = ones(Bool, size(products))
 
     for i in 1:max_nnz
-        if norm(residual)/norm_data < rtol
+        if norm(residual) / norm_data < rtol
             return SparseArrays.sparsevec(inds, factors, n_atoms)
         end
 
@@ -169,16 +172,16 @@ end
         products_abs .= abs.(products)
         _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
 
-        beta = 1/(1 - v_k'*b_k)
+        beta = 1 / (1 - v_k' * b_k)
         v_k = DtD[inds, maxindex]
-        b_k = A_inv*v_k
+        b_k = A_inv * v_k
         A_inv = [A_inv -beta*b_k;
-                 -beta*b_k' 1]
+            -beta*b_k' 1]
 
         atom = @view dictionary[:, maxindex]
         γ_k = atom - dictionary[:, inds] * b_k
         α_k = inv(sum(abs2, γ_k)) * products[maxindex]
-        factors .-= α_k*b_k
+        factors .-= α_k * b_k
         products .-= α_k .* @view DtD[:, maxindex]
 
         push!(inds, maxindex)
@@ -217,14 +220,14 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 """
 
 @inbounds function matching_pursuit_(
-        method::Union{MatchingPursuit, ParallelMatchingPursuit, GPUAcceleratedMatchingPursuit},
-        data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-        products_init::Union{Nothing, AbstractVector{T}}=nothing) where T
+    method::Union{MatchingPursuit,ParallelMatchingPursuit,GPUAcceleratedMatchingPursuit},
+    data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
+    products_init::Union{Nothing,AbstractVector{T}}=nothing) where {T}
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
-    xdict = DefaultDict{Int, T}(zero(T))
+    xdict = DefaultDict{Int,T}(zero(T))
     norm_data = norm(data)
 
     products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
@@ -233,7 +236,7 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
     for i in 1:max_iter
         # @assert(norm(residual)) && @show norm(residual), residual
         # @assert(isfinite(norm_data))
-        if norm(residual)/norm_data < rtol
+        if norm(residual) / norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
         if length(xdict) > max_nnz
@@ -260,38 +263,38 @@ end
 """ This is the original implementation by https://github.com/IshitaTakeshi, useful for
 numerical comparison and didactic purposes. """
 function sparse_coding(method::LegacyMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T};
-                       timer=TimerOutput()) where T
+    timer=TimerOutput()) where {T}
     @timeit_debug timer "Sparse coding" begin
 
-    K = size(dictionary, 2)
-    N = size(data, 2)
+        K = size(dictionary, 2)
+        N = size(data, 2)
 
-    X = spzeros(T, K, N)
+        X = spzeros(T, K, N)
 
-    for i in 1:N
-        X[:, i] = matching_pursuit_(
-            method,
-            vec(data[:, i]),
-            dictionary
-        )
-    end
+        for i in 1:N
+            X[:, i] = matching_pursuit_(
+                method,
+                vec(data[:, i]),
+                dictionary
+            )
+        end
 
     end  # @timeit
     return X
 end
 
 function matching_pursuit_(method::LegacyMatchingPursuit,
-                           data::AbstractVector{T},
-                           dictionary::AbstractMatrix{T}) where T
+    data::AbstractVector{T},
+    dictionary::AbstractMatrix{T}) where {T}
     (; max_nnz, max_iter, rtol) = method
     n_atoms = size(dictionary, 2)
 
     residual = copy(data)
     norm_data = norm(data)
 
-    xdict = DefaultDict{Int, T}(zero(T))
+    xdict = DefaultDict{Int,T}(zero(T))
     for i in 1:max_iter
-        if norm(residual)/norm_data < rtol
+        if norm(residual) / norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
         if length(xdict) > max_nnz
