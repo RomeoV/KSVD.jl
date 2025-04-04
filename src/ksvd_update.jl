@@ -6,6 +6,7 @@ import OhMyThreads: tforeach, @allow_boxed_captures, @localize
 import TimerOutputs: TimerOutput, @timeit
 import OhMyThreads.ChunkSplitters: chunks
 import Base.Threads: nthreads, threadpool
+import TSVD: tsvd
 
 # set a default
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, timer=TimerOutput()) = ksvd_update(OptimizedKSVD(), Y, D, X, timer)
@@ -119,10 +120,12 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
 
         @timeit_debug timer "compute and copy svd" begin
             # truncated svd has some problems for column matrices. so then we just do svd.
-            # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=sqrt(eps(eltype(E_Ω)))))
-            # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : tsvd(E_Ω, 1; tolconv=10*(eps(T))))
-            # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : arnoldi_svd(E_Ω, 1; tol=1e-10))
-            U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : krylov_svd(E_Ω, 1; tol=1e-10))
+            # Use the solver from the method
+            if size(E_Ω, 2) <= 3
+                U, S, V = svd!(E_Ω)
+            else
+                U, S, V = compute_truncated_svd(method.svd_solver, E_Ω, 1)
+            end
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             D_cpy[:, k] .= sign(U[1, 1]) .* @view(U[:, 1])
             X_cpy[k, ωₖ] .= (sign(U[1, 1]) * S[1]) .* @view(V[:, 1])

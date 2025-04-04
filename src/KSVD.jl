@@ -27,6 +27,7 @@ using PrecompileTools: @compile_workload
 include("set_num_threads.jl")
 include("util.jl")
 include("matching_pursuit.jl")
+include("svd_solvers.jl")
 include("ksvd_types.jl")
 include("krylov_svd.jl")
 include("ksvd_update.jl")

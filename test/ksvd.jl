@@ -2,6 +2,7 @@ import LinearAlgebra: norm
 import SparseArrays: sprand
 import Random: TaskLocalRNG, seed!
 import StatsBase: std
+import OhMyThreads
 
 @testset "Compare to Legacy Implementation." begin
     if Threads.nthreads == 1
@@ -16,7 +17,7 @@ import StatsBase: std
         data = rand(rng, T, E, N)
         D = KSVD.init_dictionary(rng, T, E, 2 * E)
         nnz_per_col = 10
-        X = sprand(rng, T, 2 * E, N, nnz_per_col*N/(2*E*N))
+        X = sprand(rng, T, 2 * E, N, nnz_per_col * N / (2 * E * N))
 
         D_baseline, X_baseline = ksvd_update(KSVD.LegacyKSVD(), data, copy(D), copy(X))
         @test all(≈(1.0), norm.(eachcol(D_baseline)))
@@ -77,6 +78,27 @@ import StatsBase: std
             @test all(≈(1.0), norm.(eachcol(D_res)))
             @test eltype(D_res) == eltype(X_res) == T
         end
+    end
+
+    @testset "Compare SVD implementations" begin
+        using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
+        m, n = 2 * 64, 2 * 256
+        nsamples = 10_000
+        nnzpercol = 5
+        T = Float32
+
+        D = rand(Float32, m, n)
+        X = stack(
+            (SparseVector(n, sample(1:n, nnzpercol; replace=false), rand(T, nnzpercol))
+             for _ in 1:nsamples);
+            dims=2)
+        Y = D * X + T(0.05) * randn(T, size(D * X))
+
+        ksvd_update_method_tsvd = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.TSVDSolver}(; shuffle_indices=false, batch_size_per_thread=1)
+        ksvd_update_method_kryl = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.KrylovSVDSolver}(; shuffle_indices=false, batch_size_per_thread=1)
+        (D_tsvd, X_tsvd) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_tsvd, maxiters=10)
+        (D_kryl, X_kryl) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_kryl, maxiters=10)
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl))) atol = 0.1
     end
 end
 
