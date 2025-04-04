@@ -9,9 +9,9 @@ struct LegacyKSVD <: KSVDMethod end
 end
 
 @kwdef mutable struct ParallelKSVD{precompute_error,T,Scheduler<:OhMyThreads.Scheduler,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
-    E_buf::AbstractMatrix{T} = T[;;]
-    E_Ω_bufs::Vector{AbstractMatrix{T}} = Matrix{T}[]
-    D_cpy_buf::AbstractMatrix{T} = T[;;]
+    E_buf::Matrix{T} = T[;;]
+    E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
+    D_cpy_buf::Matrix{T} = T[;;]
     shuffle_indices::Bool = false
     svd_solver::SVDSol = SVDSol(T)
 end
@@ -20,9 +20,9 @@ ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
     ParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver}(; kwargs...)
 
 @kwdef mutable struct BatchedParallelKSVD{precompute_error,T,Scheduler<:OhMyThreads.Scheduler,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
-    E_buf::AbstractMatrix{T} = T[;;]
-    E_Ω_bufs::Vector{AbstractMatrix{T}} = Matrix{T}[]
-    D_cpy_buf::AbstractMatrix{T} = T[;;]
+    E_buf::Matrix{T} = T[;;]
+    E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
+    D_cpy_buf::Matrix{T} = T[;;]
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
     svd_solver::SVDSol = SVDSol(T)
