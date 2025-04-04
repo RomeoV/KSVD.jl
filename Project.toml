@@ -1,6 +1,6 @@
 name = "KSVD"
 uuid = "778123d0-3295-4563-8004-fb5c576fbcd9"
-version = "1.10.0"
+version = "1.11.0"
 
 [deps]
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
