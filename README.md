@@ -20,12 +20,40 @@ This includes:
 
 # Usage
 
-Assume that each column of Y represents a feature vector (or an input signal from some system).  
-D is a dictionary. Each column of D represents an atom.  
-K-SVD derives D and X such that DX ≈ Y from only Y.  
+Assume that each column of Y represents a feature vector, and each column of D a dictionary vector, with n dictionaries (`size(D, 2) == n`).
+K-SVD derives D and X such that DX ≈ Y from only Y.
+Finally, let `nnzpercol` be the maximum number of nonzero dictionary elements per sample.
+Then we can just run
 
 ```julia
-(; D, X) = ksvd(Y, 256)
+(; D, X) = ksvd(Y, n, nnzpercol)
+```
+
+Runnable example:
+``` julia
+using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
+m, n = 2*64, 2*256
+nsamples = 10_000
+nnzpercol=5
+T = Float32
+
+D = rand(Float32, m, n);
+X = stack(
+  (SparseVector(n, sample(1:n, nnzpercol; replace=false), rand(T, nnzpercol))
+   for _ in 1:nsamples);
+  dims=2)
+Y = D*X + T(0.05)*randn(T, size(D*X))
+
+(; D, X) = ksvd(Y, n, nnzpercol)
+norm.(eachcol(Y - D*X)) |> mean  # approx 0.4, i.e. recovers 60% of the signal
+```
+
+You can get some more information about what's happening through `show_trace=true`, and by turning on the built-in timer.
+``` julia
+using TimerOutputs
+TimerOutputs.enable_debug_timings(KSVD)
+(; D, X) = ksvd(Y, n, nnzpercol; show_trace=true)
+```
 
 # we can control the matching pursuit stage and ksvd stage through method structs
 ksvd_update_method = BatchedParallelKSVD{false, Float64}(shuffle_indices=true, batch_size_per_thread=1)
