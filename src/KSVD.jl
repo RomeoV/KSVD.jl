@@ -129,13 +129,19 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms÷100);
     # if store_trace || show_trace
     trace_taskref = Ref{Task}()
     CH_T = Tuple{Int, Matrix{T}, SparseMatrixCSC{T, Int64}}
+    loggingtasks = OhMyThreads.StableTasks.StableTask{Nothing}[]
     trace_channel = Channel{CH_T}(maxiters; spawn=true, taskref=trace_taskref) do ch
+        # tforeach(ch; scheduler=:greedy) do (iter, D, X)
         for (iter, D, X) in ch
-            norm_val = (norm.(eachcol(Y - D*X)) ./ norm.(eachcol(Y))) |> mean
-            nnz_per_col_val = nnz(X) / size(X, 2)
-            show_trace && @info (iter, norm_val, nnz_per_col_val)
-            (push!(norm_results, norm_val); push!(nnz_per_col_results, nnz_per_col_val))
-            !isnothing(callback_fn) && callback_fn((; iter, Y, D, X, norm_val, nnz_per_col_val))
+            t = OhMyThreads.@spawn begin
+                norm_val = (norm.(eachcol(Y - D*X)) ./ norm.(eachcol(Y))) |> mean
+                nnz_per_col_val = nnz(X) / size(X, 2)
+                show_trace && @info (iter, norm_val, nnz_per_col_val)
+                (push!(norm_results, norm_val); push!(nnz_per_col_results, nnz_per_col_val))
+                !isnothing(callback_fn) && callback_fn((; iter, Y, D, X, norm_val, nnz_per_col_val))
+                return nothing
+            end
+            push!(loggingtasks, t)
         end
     end
 
@@ -174,6 +180,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms÷100);
     close(trace_channel)
     TimerOutputs.complement!(timer)
     wait(trace_taskref[])  # make sure trace has finished
+    foreach(wait, loggingtasks)
     return (; D, X, norm_results, nnz_per_col_results, termination_condition, timer)
 end
 
