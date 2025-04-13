@@ -3,6 +3,7 @@ uuid = "778123d0-3295-4563-8004-fb5c576fbcd9"
 version = "1.12.0"
 
 [deps]
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
@@ -28,6 +29,7 @@ DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
 KSVDCudaExt = "CUDA"
 
 [compat]
+Arpack = "0.5.4"
 CUDA = "5"
 DataStructures = "0.18"
 Distributions = "0.22 - 0.25"
