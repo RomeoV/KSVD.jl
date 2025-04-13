@@ -13,7 +13,7 @@ end
     E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
     D_cpy_buf::Matrix{T} = T[;;]
     shuffle_indices::Bool = false
-    svd_solver::SVDSol = SVDSol(T)
+    svd_solver::SVDSol = SVDSol()
 end
 # Backward compatibility constructor
 ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
@@ -25,7 +25,7 @@ ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
     D_cpy_buf::Matrix{T} = T[;;]
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
-    svd_solver::SVDSol = SVDSol(T)
+    svd_solver::SVDSol = SVDSol()
 end
 # Backward compatibility constructor
 BatchedParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
@@ -36,7 +36,7 @@ BatchedParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} 
     shuffle_indices::Bool = false
     batch_size_per_thread::Int = 1
     reduction_method::Symbol = :clustering  # or :mean
-    svd_solver::SVDSol = SVDSol(T)
+    svd_solver::SVDSol = SVDSol()
 end
 # Backward compatibility constructor
 DistributedKSVD{T}(; kwargs...) where {T} = DistributedKSVD{T,TSVDSolver{T}}(; kwargs...)
