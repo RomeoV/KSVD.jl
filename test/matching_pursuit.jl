@@ -1,6 +1,6 @@
 import Random: seed!, TaskLocalRNG, rand!
 import SparseArrays
-import SparseArrays: sparse, findnz
+import SparseArrays: sparse, findnz, nnz
 import StatsBase: sample, mean, middle
 test_cuda_ext = try
     using CUDA, FLoops
@@ -95,6 +95,15 @@ end
        end
 
     end
+end
+
+@testset "Check default interface" begin
+    D = rand(10, 50)
+    Y = rand(10, 2)
+    X1 = sparse_coding(Y, D)
+    @test all(nnz.(eachcol(X1)) .<= 5)  # 50÷10
+    X1 = sparse_coding(Y, D, 3)
+    @test all(nnz.(eachcol(X1)) .<= 3)
 end
 
 # D = [
