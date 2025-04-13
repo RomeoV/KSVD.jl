@@ -127,7 +127,8 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
                 U, S, V = compute_truncated_svd(method.svd_solver, E_Ω, 1)
             end
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
-            D_cpy[:, k] .= sign(U[1, 1]) .* @view(U[:, 1])
+            # We also re-normalize here. Even though the result should be normalized, we can have some numerical inaccuracies.
+            D_cpy[:, k] .= sign(U[1, 1]) .* normalize!(@view(U[:, 1]))
             X_cpy[k, ωₖ] .= (sign(U[1, 1]) * S[1]) .* @view(V[:, 1])
         end
 
