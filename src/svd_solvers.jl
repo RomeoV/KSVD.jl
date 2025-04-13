@@ -31,7 +31,8 @@ function compute_truncated_svd(solver::TSVDSolver, A::AbstractMatrix{T}, k::Int)
 end
 
 function compute_truncated_svd(solver::ArpackSolver, A::AbstractMatrix{T}, k::Int) where {T}
-    (U, S, V), _ = svds(A; nsv=k, maxiter=solver.maxiter, tol=solver.tolconv)
+    # we copy here because we've had issues with @view and Arpack before...
+    (U, S, V), _ = svds(copy(A); nsv=k, maxiter=solver.maxiter, tol=solver.tolconv)
     (U, S, V)
 end
 
