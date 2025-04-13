@@ -4,19 +4,16 @@ import TSVD: tsvd
 
 abstract type AbstractTruncatedSVD end
 
-@kwdef struct TSVDSolver <: AbstractTruncatedSVD
-    tolconv::Float64 = 10 * eps(Float32)
-    TSVDSolver(T::Type{<:Number}) = new(10 * eps(T))
+@kwdef struct TSVDSolver{T<:Number} <: AbstractTruncatedSVD
+    tolconv::Float64 = sqrt(eps(real(eltype(T))))
 end
 
-@kwdef struct KrylovSVDSolver <: AbstractTruncatedSVD
-    tol::Float64 = 10 * eps(Float32)
-    KrylovSVDSolver(T::Type{<:Number}) = new(10 * eps(T))
+@kwdef struct KrylovSVDSolver{T<:Number} <: AbstractTruncatedSVD
+    tol::Float64 = 10 * sqrt(eps(real(eltype(T))))
 end
 
-@kwdef struct ArnoldiSVDSolver <: AbstractTruncatedSVD
-    tol::Float64 = 10 * eps(Float32)
-    ArnoldiSVDSolver(T::Type{<:Number}) = new(10 * eps(T))
+@kwdef struct ArnoldiSVDSolver{T<:Number} <: AbstractTruncatedSVD
+    tol::Float64 = sqrt(eps(real(eltype(T))))
 end
 
 # Solver implementations

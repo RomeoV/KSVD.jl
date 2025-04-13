@@ -4,8 +4,8 @@ struct LegacyKSVD <: KSVDMethod end
 
 @kwdef struct OptimizedKSVD{SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     shuffle_indices::Bool = false
-    svd_solver::SVDSol = TSVDSolver(Float32)
-    OptimizedKSVD(shuffle_indices, svd_solver) = new{TSVDSolver}(shuffle_indices, svd_solver)
+    svd_solver::SVDSol = TSVDSolver{Float32}()
+    OptimizedKSVD(shuffle_indices, svd_solver) = new{TSVDSolver{Float32}}(shuffle_indices, svd_solver)
 end
 
 @kwdef mutable struct ParallelKSVD{precompute_error,T,Scheduler<:OhMyThreads.Scheduler,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
@@ -17,7 +17,7 @@ end
 end
 # Backward compatibility constructor
 ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
-    ParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver}(; kwargs...)
+    ParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver{T}}(; kwargs...)
 
 @kwdef mutable struct BatchedParallelKSVD{precompute_error,T,Scheduler<:OhMyThreads.Scheduler,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     E_buf::Matrix{T} = T[;;]
@@ -29,7 +29,7 @@ ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
 end
 # Backward compatibility constructor
 BatchedParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
-    BatchedParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver}(; kwargs...)
+    BatchedParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver{T}}(; kwargs...)
 
 @kwdef mutable struct DistributedKSVD{T,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     submethod_per_worker::Dict{Int,<:KSVDMethod} = Dict()
@@ -39,7 +39,7 @@ BatchedParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} 
     svd_solver::SVDSol = SVDSol(T)
 end
 # Backward compatibility constructor
-DistributedKSVD{T}(; kwargs...) where {T} = DistributedKSVD{T,TSVDSolver}(; kwargs...)
+DistributedKSVD{T}(; kwargs...) where {T} = DistributedKSVD{T,TSVDSolver{T}}(; kwargs...)
 
 const ThreadedKSVDMethod = Union{BatchedParallelKSVD,ParallelKSVD}
 const ThreadedKSVDMethodPrecomp{B} = Union{BatchedParallelKSVD{B},ParallelKSVD{B}}
