@@ -44,7 +44,7 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
             X_cpy = copy(X)
         end
         D_cpy = method.D_cpy_buf
-        @assert all(≈(1.0), norm.(eachcol(D)))
+        @assert all(≈(1.0), norm.(eachcol(D))) "$(extrema(norm.(eachcol(D))))"
 
         # this is a no-op if the template `precompute_error` is false.
         E = maybe_prepare_error_buffer!(method, Y, D, X; timer)
