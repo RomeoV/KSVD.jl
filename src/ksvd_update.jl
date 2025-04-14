@@ -128,8 +128,11 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
             end
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             # We also re-normalize here. Even though the result should be normalized, we can have some numerical inaccuracies.
-            D_cpy[:, k] .= sign(U[1, 1]) .* normalize!(@view(U[:, 1]))
-            X_cpy[k, ωₖ] .= (sign(U[1, 1]) * S[1]) .* @view(V[:, 1])
+            # Finally, sometimes =U[1, 1]= is zero! Then sign(U[1,1]) would be zero... not good.
+            # Instead we use =signbit= check to make sure we never zero out `U`.
+            sgn = (signbit(U[1, 1]) ? -1 : 1)
+            D_cpy[:, k] .= sgn .* @view(U[:, 1])
+            X_cpy[k, ωₖ] .= (sgn * S[1]) .* @view(V[:, 1])
         end
 
     end  # @timeit
