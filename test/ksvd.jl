@@ -94,11 +94,17 @@ import OhMyThreads
             dims=2)
         Y = D * X + T(0.05) * randn(T, size(D * X))
 
-        ksvd_update_method_tsvd = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.TSVDSolver}(; shuffle_indices=false, batch_size_per_thread=1)
-        ksvd_update_method_kryl = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.KrylovSVDSolver}(; shuffle_indices=false, batch_size_per_thread=1)
+        ksvd_update_method_tsvd = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.TSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
+        ksvd_update_method_kryl = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.KrylovSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
+        ksvd_update_method_arno = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArnoldiSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
+        ksvd_update_method_arpa = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArpackSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
         (D_tsvd, X_tsvd) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_tsvd, maxiters=10)
         (D_kryl, X_kryl) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_kryl, maxiters=10)
+        (D_arno, X_arno) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arno, maxiters=10)
+        (D_arpa, X_arpa) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arpa, maxiters=10)
         @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl))) atol = 0.1
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_arno * X_arno))) atol = 0.1
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_arpa * X_arpa))) atol = 0.1
     end
 end
 
