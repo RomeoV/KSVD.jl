@@ -10,22 +10,22 @@ using LinearAlgebra: mul!, eltype, size
 abstract type AbstractTruncatedSVD end
 
 @kwdef struct TSVDSolver{T<:Number} <: AbstractTruncatedSVD
-    tolconv::Float64 = sqrt(eps(real(T)))
+    tolconv::Float64 = 100*(eps(real(T)))
     maxiter::Int = 50
 end
 
 @kwdef struct ArpackSVDSolver{T<:Number} <: AbstractTruncatedSVD
-    tolconv::Float64 = sqrt(eps(real(T)))
+    tolconv::Float64 = 100*(eps(real(T)))
     maxiter::Int = 50
 end
 
 @kwdef struct KrylovSVDSolver{T<:Number} <: AbstractTruncatedSVD
-    tol::Float64 = sqrt(eps(real(T)))
+    tol::Float64 = 100*(eps(real(T)))
     maxiter::Int = 50
 end
 
 @kwdef struct ArnoldiSVDSolver{T<:Number} <: AbstractTruncatedSVD
-    tol::Float64 = sqrt(eps(real(T)))
+    tol::Float64 = 100*(eps(real(T)))
     maxiter::Int = 50
 end
 
