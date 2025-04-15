@@ -121,20 +121,9 @@ function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,Ort
 
         @timeit_debug timer "cat sparse arrays" begin
             # The "naive" version of `cat`ing the columns in X_ run into type inference problems for some reason.
-            # I tried `hcat(X_...)` and `X = spzeros(Float64, K, N); for (i, col) in enumerate(X_); X[:, i]=col; end` they were both very slow.
-            # This version seems to overcome the type inference issues and makes the code much faster.
-            # Note that there's a multithreaded version of this too here: https://github.com/RomeoV/KSVD.jl/blob/b3e089c925a9123692f766b2106934eebb13edcc/src/matching_pursuit.jl#L168-L183
-            X = let
-                I = Int[]
-                J = Int[]
-                V = T[]
-                for (i, v) in enumerate(X_)
-                    append!(I, SparseArrays.nonzeroinds(v))
-                    append!(J, fill(i, SparseArrays.nnz(v)))
-                    append!(V, SparseArrays.nonzeros(v))
-                end
-                sparse(I, J, V, K, N)
-            end
+            # The Julia base version of `reduce(hcat, X_)` is super slow.
+            # This uses an overloaded definition defined in this package (in `utils.jl`).
+            X = reduce(hcat, X_)
         end
 
     end  # @timeit

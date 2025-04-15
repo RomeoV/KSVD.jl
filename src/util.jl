@@ -2,6 +2,7 @@ import DataStructures: DefaultDict
 import SparseArrays: sparsevec
 import Random: AbstractRNG, default_rng
 import Distributions: Binomial, quantile
+import Base._typed_hcat
 
 "Helper for `@threads for (i, idx) in enumerate(indices)` use case."
 const cenumerate = collect ∘ enumerate
@@ -67,10 +68,27 @@ end
 # gen() = sum(sample([0,1], ProbabilityWeights([0.99, 0.01]), 100_000))
 # histogram([gen() for _ in 1:1000])
 " Compute buffer size that is large enough with extremely high likelyhood."
-function compute_reasonable_buffer_size(N, pct_nz; failure_chance = 0)
+function compute_reasonable_buffer_size(N, pct_nz; failure_chance=0)
     D = Binomial(N, pct_nz)
-    quantile(D, 1-failure_chance)
+    quantile(D, 1 - failure_chance)
 end
 
 reorient!(vec::AbstractVector) = vec .*= sign(first(vec))
 reorient(vec::AbstractVector) = vec .* sign(first(vec))
+
+function
+Base._typed_hcat(::Type{T}, A::Base.AbstractVecOrTuple{SparseVector{T,Idx_t}}) where {T,Idx_t}
+    K = length(first(A))
+    N = length(A)
+    X = let
+        I = Idx_t[]
+        J = Idx_t[]
+        V = T[]
+        for (i, v) in enumerate(A)
+            append!(I, SparseArrays.nonzeroinds(v))
+            append!(J, fill(Idx_t(i), SparseArrays.nnz(v)))
+            append!(V, SparseArrays.nonzeros(v))
+        end
+        sparse(I, J, V, K, N)
+    end
+end
