@@ -46,6 +46,11 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
         D_cpy = method.D_cpy_buf
         @assert all(≈(1.0), norm.(eachcol(D))) "$(extrema(norm.(eachcol(D))))"
 
+        # prepare variables for update ksvd_update_X!
+        R = X.rowval
+        Rsorted = sort(R)
+        Rsortperm = sortperm(R)
+
         # this is a no-op if the template `precompute_error` is false.
         E = maybe_prepare_error_buffer!(method, Y, D, X; timer)
 
@@ -82,7 +87,7 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
                 @timeit_debug timer "copy D results" begin
                     D[:, index_batch] .= @view D_cpy[:, index_batch]
                 end
-                ksvd_update_X!(X, X_cpy, index_batch, timer)
+                ksvd_update_X!(X, X_cpy, index_batch, R, Rsorted, Rsortperm, timer)
             end
         end  # @timeit
 
@@ -147,6 +152,22 @@ function ksvd_update_X!(X, X_cpy, index_batch, timer=TimerOutput())
         # we can exploit that the new nonzero indices don't change!
         # Note: This doesn't seem to help in the sparse copy above.
         row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+        nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
+        # # <END OPTIMIZED BLOCK>
+    end
+end
+
+function ksvd_update_X!(X, X_cpy, index_batch, R, Rsorted, Rsortperm, timer=TimerOutput())
+    @timeit_debug timer "copy X results" begin
+        # # <BEGIN OPTIMIZED BLOCK>
+        # # Original:
+        # row_indices = SparseArrays.rowvals(X) .∈ [index_batch]
+        # # Optimized:
+        # We use a crucial insight here, which is that the nonzero indices don't change throughout the ksvd iterations.
+        # It turns out that the rowvals ∈ index_batch actually takes a huge amount of time.
+        # But we can operate on sorted indices, massively cutting down the time here.
+        permindices = searchsortedfirst(Rsorted, first(index_batch)):searchsortedlast(Rsorted, last(index_batch))
+        row_indices = Rsortperm[permindices]
         nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
         # # <END OPTIMIZED BLOCK>
     end
