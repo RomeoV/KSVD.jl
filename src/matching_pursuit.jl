@@ -108,13 +108,13 @@ function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,Ort
         @timeit_debug timer "matching pursuit" begin
             X_ = let DtD = DtD  # avoid boxing: https://juliafolds2.github.io/OhMyThreads.jl/stable/literate/boxing/boxing/#Non-race-conditon-boxed-variables
                 map_fn(czip(eachcol(data), eachcol(products))) do (datacol, productcol)
-                matching_pursuit_(
-                    method,
-                    datacol,
-                    dictionary,
-                    DtD;
-                    products_init=(method.precompute_products ? productcol : nothing)
-                )
+                    matching_pursuit_(
+                        method,
+                        datacol,
+                        dictionary,
+                        DtD;
+                        products_init=(method.precompute_products ? productcol : nothing)
+                    )
                 end
             end
         end

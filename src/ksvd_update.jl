@@ -1,12 +1,12 @@
-import Random: shuffle
+import Random:shuffle
 import SparseArrays: nzvalview, nonzeroinds, nonzeros
 import OhMyThreads
 import OhMyThreads: tforeach, @allow_boxed_captures, @localize
 # import OhMyThreads: SerialScheduler
 import TimerOutputs: TimerOutput, @timeit
-import OhMyThreads.ChunkSplitters: chunks
+import OhMyThreads.ChunkSplitters:chunks
 import Base.Threads: nthreads, threadpool
-import TSVD: tsvd
+import TSVD:tsvd
 
 # set a default
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, timer=TimerOutput()) = ksvd_update(OptimizedKSVD(), Y, D, X, timer)
@@ -209,9 +209,9 @@ function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{false}, E_Ω_buf, E, Y, D, X,
         E_Ω = @view E_Ω_buf[:, 1:length(ωₖ)]
 
         ##<BEGIN OPTIMIZED BLOCK>
-        ## Original:
+        # Original:
         # E_Ω .= Y[:, ωₖ] - D * X[:, ωₖ] + D[:, k] * X[k, ωₖ]'
-        ## Optimized:
+        # Optimized:
         @timeit_debug timer "copy data" begin
             E_Ω .= @view Y[:, ωₖ]
             # E_Ω .= Y[:, ωₖ]

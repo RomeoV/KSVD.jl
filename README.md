@@ -32,8 +32,8 @@ Then we can just run
 Runnable example:
 ``` julia
 using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
-m, n = 2*64, 2*256
-nsamples = 10_000
+m, n = 4*64, 4*256
+nsamples = 50_000
 nnzpercol=5
 T = Float32
 

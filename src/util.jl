@@ -11,7 +11,7 @@ const cenumerate = collect ∘ enumerate
 const czip = collect ∘ zip
 
 
-function SparseArrays.sparsevec(d::DefaultDict{Int, T}, m::Int) where T
+function SparseArrays.sparsevec(d::DefaultDict{Int,T}, m::Int) where {T}
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
 end
 
@@ -20,7 +20,7 @@ init_dictionary(::Type{T}, n::Int, K::Int) where {T} = init_dictionary(default_r
 function init_dictionary(rng::AbstractRNG, T::Type, n::Int, K::Int)
     # D must be a full-rank matrix
     D = rand(rng, T, n, K) .- 0.5
-    while rank(D, rtol=sqrt(min(n,K)*eps())) != min(n, K)
+    while rank(D, rtol=sqrt(min(n, K) * eps())) != min(n, K)
         D = rand(rng, T, n, K) .- 0.5
     end
     D = convert(Matrix{T}, D)
@@ -34,9 +34,9 @@ end
 By default,`findmax` uses `isless`, which does a nan-check before computing `<(lhs, rhs)`.
 We roll basically the same logic as in `Julia/Base/reduce.jl:findmax` but we directly use `<`, which gives us about a 1.5x speedup.
 """
-function findmax_fast(data::Vector{T}) where T
+function findmax_fast(data::Vector{T}) where {T}
     cmp_tpl((fm, im), (fx, ix)) = (fm < fx) ? (fx, ix) : (fm, im)
-    mapfoldl( ((k, v),) -> (v, k), cmp_tpl, pairs(data))
+    mapfoldl(((k, v),) -> (v, k), cmp_tpl, pairs(data))
 end
 
 function error_matrix(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
@@ -49,8 +49,10 @@ function error_matrix2(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, 
     return Y - (D * X - D[:, k:k] * X[k:k, :])
 end
 function error_matrix3(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
-    D = copy(D); X = copy(X);
-    D[:, k] .= 0; X[k, :] .= 0
+    D = copy(D)
+    X = copy(X)
+    D[:, k] .= 0
+    X[k, :] .= 0
     return Y - D * X
 end
 # function error_matrix4(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, k::Int)
