@@ -4,6 +4,13 @@ import Random: TaskLocalRNG, seed!
 import StatsBase: std
 import OhMyThreads
 
+function allapproxequal(xs; kwargs...)
+    isempty(xs) && return true
+    x1 = first(xs)
+    all(x -> isapprox(x, x1; kwargs...), xs)
+end
+
+
 @testset "Compare to Legacy Implementation." begin
     if Threads.nthreads == 1
         @warn "Parallel implementation will only be tested properly if test is launched with multiple threads!"
@@ -94,17 +101,49 @@ import OhMyThreads
             dims=2)
         Y = D * X + T(0.05) * randn(T, size(D * X))
 
+        idx = findall(!iszero, X[1, :])
+        Y_ = Y[:, idx]
+
+        (U_tsvd, S_tsvd, V_tsvd) = KSVD.compute_truncated_svd(KSVD.TSVDSolver{Float32}(), Y[:, idx], 1)
+        λ = sign.(U_tsvd[1, :])
+        U_tsvd *= λ
+        V_tsvd *= λ'
+
+        (U_kryl, S_kryl, V_kryl) = KSVD.compute_truncated_svd(KSVD.KrylovSVDSolver{Float32}(), Y[:, idx], 1)
+        λ = sign.(U_kryl[1, :])
+        U_kryl *= λ
+        V_kryl *= λ'
+
+        (U_arno, S_arno, V_arno) = KSVD.compute_truncated_svd(KSVD.ArnoldiSVDSolver{Float32}(), Y[:, idx], 1)
+        λ = sign.(U_arno[1, :])
+        U_arno *= λ
+        V_arno *= λ'
+
+        (U_arpa, S_arpa, V_arpa) = KSVD.compute_truncated_svd(KSVD.ArpackSVDSolver{Float32}(), Y[:, idx], 1)
+        λ = sign.(U_arpa[1, :])
+        U_arpa *= λ
+        V_arpa *= λ'
+        @test allapproxequal([U_tsvd, U_kryl, U_arno, U_arpa])
+        @test allapproxequal([S_tsvd, S_kryl, S_arno, S_arpa])
+        @test allapproxequal([V_tsvd, V_kryl, V_arno, V_arpa])
+
+
         ksvd_update_method_tsvd = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.TSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
         ksvd_update_method_kryl = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.KrylovSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
         ksvd_update_method_arno = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArnoldiSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
-        ksvd_update_method_arpa = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArpackSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
-        (D_tsvd, X_tsvd) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_tsvd, maxiters=10)
-        (D_kryl, X_kryl) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_kryl, maxiters=10)
-        (D_arno, X_arno) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arno, maxiters=10)
-        (D_arpa, X_arpa) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arpa, maxiters=10)
-        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl))) atol = 0.1
-        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_arno * X_arno))) atol = 0.1
-        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd))) ≈ mean(norm.(eachcol(Y - D_arpa * X_arpa))) atol = 0.1
+        # Arpack crashes when called from multiple threads at once!
+        # ksvd_update_method_arpa = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArpackSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
+        D_init = KSVD.init_dictionary(Float32, m, n)
+        Random.seed!(42)
+        (D_tsvd, X_tsvd) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_tsvd, maxiters=10, D_init=copy(D_init))
+        Random.seed!(42)
+        (D_kryl, X_kryl) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_kryl, maxiters=10, D_init=copy(D_init))
+        Random.seed!(42)
+        (D_arno, X_arno) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arno, maxiters=10, D_init=copy(D_init))
+        # (D_arpa, X_arpa) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arpa, maxiters=10, D_init)
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl)) ./ norm.(eachcol(Y))) atol = 0.005
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arno * X_arno)) ./ norm.(eachcol(Y))) atol = 0.005
+        # @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arpa * X_arpa)) ./ norm.(eachcol(Y))) atol = 0.005
     end
 end
 
