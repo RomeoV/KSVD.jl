@@ -89,7 +89,7 @@ import OhMyThreads
 
         D = rand(Float32, m, n)
         X = stack(
-            (SparseVector(n, sample(1:n, nnzpercol; replace=false), rand(T, nnzpercol))
+            (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
              for _ in 1:nsamples);
             dims=2)
         Y = D * X + T(0.05) * randn(T, size(D * X))
