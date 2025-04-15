@@ -87,7 +87,7 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
                 @timeit_debug timer "copy D results" begin
                     D[:, index_batch] .= @view D_cpy[:, index_batch]
                 end
-                ksvd_update_X!(X, X_cpy, index_batch, R, Rsorted, Rsortperm, timer)
+                ksvd_update_X!(X, X_cpy, index_batch, Rsorted, Rsortperm, timer)
             end
         end  # @timeit
 
@@ -157,7 +157,7 @@ function ksvd_update_X!(X, X_cpy, index_batch, timer=TimerOutput())
     end
 end
 
-function ksvd_update_X!(X, X_cpy, index_batch, R, Rsorted, Rsortperm, timer=TimerOutput())
+function ksvd_update_X!(X, X_cpy, index_batch, Rsorted, Rsortperm, timer=TimerOutput())
     @timeit_debug timer "copy X results" begin
         # # <BEGIN OPTIMIZED BLOCK>
         # # Original:
