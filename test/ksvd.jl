@@ -94,7 +94,7 @@ end
         nnzpercol = 5
         T = Float32
 
-        D = rand(Float32, m, n)
+        D = KSVD.init_dict(Float32, m, n)
         X = stack(
             (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
              for _ in 1:nsamples);
