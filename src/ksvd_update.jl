@@ -1,12 +1,12 @@
-import Random:shuffle
+import Random: shuffle
 import SparseArrays: nzvalview, nonzeroinds, nonzeros
 import OhMyThreads
 import OhMyThreads: tforeach, @allow_boxed_captures, @localize
 # import OhMyThreads: SerialScheduler
 import TimerOutputs: TimerOutput, @timeit
-import OhMyThreads.ChunkSplitters:chunks
+import OhMyThreads.ChunkSplitters: chunks
 import Base.Threads: nthreads, threadpool
-import TSVD:tsvd
+import TSVD: tsvd
 
 # set a default
 ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, timer=TimerOutput()) = ksvd_update(OptimizedKSVD(), Y, D, X, timer)
@@ -166,7 +166,8 @@ function ksvd_update_X!(X, X_cpy, index_batch, Rsorted, Rsortperm, timer=TimerOu
         # We use a crucial insight here, which is that the nonzero indices don't change throughout the ksvd iterations.
         # It turns out that the rowvals ∈ index_batch actually takes a huge amount of time.
         # But we can operate on sorted indices, massively cutting down the time here.
-        permindices = searchsortedfirst(Rsorted, first(index_batch)):searchsortedlast(Rsorted, last(index_batch))
+        permindices = vcat([collect(searchsortedfirst(Rsorted, i):searchsortedlast(Rsorted, i))
+                            for i in index_batch]...)
         row_indices = Rsortperm[permindices]
         nzvalview(X)[row_indices] .= nzvalview(X_cpy)[row_indices]
         # # <END OPTIMIZED BLOCK>

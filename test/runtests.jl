@@ -43,5 +43,12 @@ end
         rand!(SparseArrays.nzvalview(X_cpy))
         KSVD.ksvd_update_X!(X, X_cpy, index_set, Rsorted, Rsortperm)
         @test X[index_set, :] == X_cpy[index_set, :]
+
+        # index set may be non-continuous and shuffled
+        index_set = [15, 10, 21]
+        rand!(SparseArrays.nzvalview(X_cpy))
+        KSVD.ksvd_update_X!(X, X_cpy, index_set, Rsorted, Rsortperm)
+        @test X[index_set, :] == X_cpy[index_set, :]
+
     end
 end
