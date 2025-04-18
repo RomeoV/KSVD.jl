@@ -49,6 +49,6 @@ end
         rand!(SparseArrays.nzvalview(X_cpy))
         KSVD.ksvd_update_X!(X, X_cpy, index_set, Rsorted, Rsortperm)
         @test X[index_set, :] == X_cpy[index_set, :]
-
+        @test all(nzvalview(X[setdiff(axes(X, 1), index_set), :]) .!= nzvalview(X_cpy[setdiff(axes(X, 1), index_set), :]))
     end
 end
