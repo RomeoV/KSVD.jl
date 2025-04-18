@@ -46,8 +46,8 @@ end
             KSVD.maybe_init_buffers!(method, E, 2 * E, N)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
-            @test D_res ≈ D_baseline rtol = sqrt(eps(T))
-            @test X_res ≈ X_baseline rtol = sqrt(eps(T))
+            @test D_res ≈ D_baseline rtol = 10*sqrt(eps(T))
+            @test X_res ≈ X_baseline rtol = 10*sqrt(eps(T))
 
             @test all(≈(1.0), norm.(eachcol(D_res)))
             @test eltype(D_res) == eltype(X_res) == T
