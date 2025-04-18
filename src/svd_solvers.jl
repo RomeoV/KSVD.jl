@@ -71,13 +71,13 @@ LinearAlgebra.mul!(y, S::LazySym, x) =
 function compute_truncated_svd(solver::ArnoldiSVDSolver, A::AbstractMatrix{T}, k::Int) where {T}
     m, n = size(A)
     (U, S, V) = if m > n  # Tall matrix, decompose A^T * A
-        (; Q, R, eigenvalues), _ = partialschur(A' * A; nev=k, tol=solver.tol)
+        (; Q, R, eigenvalues), _ = partialschur(Symmetric(A' * A); nev=k, tol=solver.tol)
         V = Q
         Sigma = sqrt.(real.(eigenvalues))
         U = A * V * Diagonal(1 ./ Sigma)
         (U, Sigma, V)
     else  # Wide matrix, decompose A * A^T
-        (; Q, R, eigenvalues), _ = partialschur(A * A'; nev=k, tol=solver.tol)
+        (; Q, R, eigenvalues), _ = partialschur(Symmetric(A * A'); nev=k, tol=solver.tol)
         U = Q
         Sigma = sqrt.(real.(eigenvalues))
         V = A' * U * Diagonal(1 ./ Sigma)
