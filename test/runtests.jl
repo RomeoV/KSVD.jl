@@ -3,6 +3,7 @@ using LinearAlgebra
 # using ReTest
 using Test
 using SparseArrays
+import SparseArrays.nzvalview
 using Random
 
 @testset "Test ksvd algo" begin
