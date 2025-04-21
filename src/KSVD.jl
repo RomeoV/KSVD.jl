@@ -34,6 +34,8 @@ include("ksvd_update.jl")
 include("ksvd_update_legacy.jl")
 include("ksvd_update_optimized.jl")
 include("ksvd_update_threaded_utils.jl")
+include("atomreplacement.jl")
+include("dictionary_tracking.jl")
 function __init__()
     set_num_threads(Threads.nthreads())
 end
