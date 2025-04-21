@@ -60,9 +60,9 @@ let
     Xhat = KSVD.sparse_coding(Ymeas, Dhat, nnzpercol)
     Ehat = Ymeas - Dhat * Xhat
 
-    tracker = KSVD.EWMAUsageTracking(abs, n)
+    tracker = KSVD.EWMAUsageTracking(n)
     for i in axes(X, 1)
-        KSVD.resetstats!(tracker, i, sum(abs, Xhat[i, :]))
+        KSVD.resetstats!(tracker, i, sum(Xhat[i, :]))
     end
 
 
@@ -88,6 +88,46 @@ let
     # @info sum(Xhat), sum(Dhat)
 end
 
+m, n = 1024, 4 * 1024
+nsamples = 32_000
+nnzpercol = 40
+T = Float32
+for ndicts in 1:5
+    Dgt = KSVD.init_dictionary(Float32, m, n)
+    Xgt = stack(
+        (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), 1 .+ rand(T, nnzpercol))
+         for _ in 1:nsamples);
+        dims=2)
+    Ygt = Dgt * Xgt
+    Ymeas = Ygt + T(0.00) * randn(T, size(Ygt))
+
+    Dhat = copy(Dgt)
+    indices = sample(axes(Dhat, 2), ndicts; replace=false)
+    for idx in indices
+        normalize!(Distributions.randn!(@view Dhat[:, idx]))
+    end
+    ds_old = [Dhat[:, i] for i in indices]
+    Xhat = KSVD.sparse_coding(Ymeas, Dhat, nnzpercol)
+    Ehat = KSVD.fasterror!(similar(Ymeas), Ymeas, Dhat, Xhat)
+
+    tracker = KSVD.EWMAUsageTracking(n)
+    for i in axes(X, 1)
+        KSVD.resetstats!(tracker, i, sum(Xhat[i, :]))
+    end
+
+    # @info sum(Xhat), sum(Dhat)
+    nreplaced = KSVD.replace_atoms!(
+        KSVD.EnergyBasedReplacement(; beta=4, maxreplacements=10),
+        tracker,
+        Ymeas,
+        Dhat,
+        Xhat,
+        KSVD.ParallelMatchingPursuit(; max_nnz=nnzpercol);
+        E=Ehat
+    )
+    @test ndicts == nreplaced
+    @info nreplaced
+end
 
 # updateerror! doesn't work currently.
 # Xold = copy(Xhat)
