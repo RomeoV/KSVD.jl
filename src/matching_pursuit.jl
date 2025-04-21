@@ -102,7 +102,7 @@ function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,Ort
         # if the data is very large we might not want to precompute this.
         @timeit_debug timer "precompute products" begin
             products = (isnothing(DtY) ? (method.precompute_products ? (dictionary' * data) : fill(nothing, 1, size(data, 2)))
-                        : DtY)
+                        : copy(DtY))  # we need to copy here because we're about to operate in place on these
         end
 
         @timeit_debug timer "matching pursuit" begin
