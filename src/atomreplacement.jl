@@ -44,49 +44,54 @@ function replace_atoms!(
     DtY=D' * Y,
     verbose::Bool=false
 ) where {T}
+    @timeit_debug timer "replace_atoms!" begin
+        num_replaced = 0
+        fn = energyfunction(tracker)
 
-    num_replaced = 0
-    fn = energyfunction(tracker)
+        for attempt in 1:strategy.maxreplacements
+            # DtD = D' * D
+            # DtY = D' * Y
+            # E = Y - D * X
 
-    for attempt in 1:strategy.maxreplacements
-        # DtD = D' * D
-        # DtY = D' * Y
-        # E = Y - D * X
+            energy_old, idx = findmin(values(tracker))
+            d_new = proposecandidate(strategy.proposal_strategy, Y, D, X; timer, verbose, E)
+            energy_new = evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn; timer, DtD, DtY)
 
-        energy_old, idx = findmin(values(tracker))
-        d_new = proposecandidate(strategy.proposal_strategy, Y, D, X; timer, verbose, E)
-        energy_new = evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn; timer, DtD, DtY)
+            @show (energy_new, energy_old)
+            if energy_new > strategy.beta * energy_old
+                (d_old, X_old) = D[:, idx], copy(X)
+                replaceatom!(D, idx, d_new, Y; timer, DtD, DtY)
+                @assert DtY ≈ D' * Y
+                X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
 
-        @show (energy_new, energy_old)
-        if energy_new > strategy.beta * energy_old
-            (d_old, X_old) = D[:, idx], copy(X)
-            replaceatom!(D, idx, d_new, Y; timer, DtD, DtY)
-            @assert DtY ≈ D' * Y
-            X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
+                fasterror!(E, Y, D, X; timer)
+                # updateerror!(E, Y, D, d_old, d_new, X_old, X, idx)
+                resetstats!(tracker, idx, energy_new)
+                num_replaced += 1
+                @assert DtY ≈ D' * Y
+            else
+                break # Stop if the best candidate isn't accepted
+            end
+        end # End replacement attempts loop
 
-            fasterror!(E, Y, D, X)
-            # updateerror!(E, Y, D, d_old, d_new, X_old, X, idx)
-            resetstats!(tracker, idx, energy_new)
-            num_replaced += 1
-            @assert DtY ≈ D' * Y
-        else
-            break # Stop if the best candidate isn't accepted
-        end
-    end # End replacement attempts loop
-
-    return num_replaced
+        return num_replaced
+    end
 end
 
 function evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn=abs2; timer=TimerOutput(), DtD=D' * D, DtY=D' * Y)
-    D′ = [D d_new]
-    Dtdnew = D' * d_new
-    D′tD′ = [DtD Dtdnew;
-        Dtdnew' one(eltype(DtD))]
-    D′tY = [DtY;
-        d_new' * Y]
-    X = sparse_coding(sparse_coding_method, Y, D′; DtD=D′tD′, DtY=D′tY)
-    # X = sparse_coding(sparse_coding_method, Y, D′)
-    return sum(fn, X[end, :])
+    @timeit_debug timer "evaluate candidate energy" begin
+        @timeit_debug timer "compute D′" begin
+            D′ = [D d_new]
+            Dtdnew = D' * d_new
+            D′tD′ = [DtD Dtdnew;
+                Dtdnew' one(eltype(DtD))]
+            D′tY = [DtY;
+                d_new' * Y]
+        end
+        X = sparse_coding(sparse_coding_method, Y, D′; DtD=D′tD′, DtY=D′tY, timer)
+        # X = sparse_coding(sparse_coding_method, Y, D′)
+        return sum(fn, X[end, :])
+    end
 end
 
 function proposecandidate(strat::ErrorSamplingProposalStrategy, Y, D, X, np::Int=0;
