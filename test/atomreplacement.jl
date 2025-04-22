@@ -154,12 +154,12 @@ for ndicts in 1:3
     Xhat = KSVD.sparse_coding(Ymeas, Dhat, nnzpercol)
     Ehat = KSVD.fasterror!(similar(Ymeas), Ymeas, Dhat, Xhat)
 
-    tracker = KSVD.EWMAUsageTracking(n)
-    for i in axes(Xhat, 1)
-        KSVD.resetstats!(tracker, i, sum(Xhat[i, :]))
-    end
+    tracker = KSVD.EWMAUsageTracking(abs2, n)
+    fn = KSVD.energyfunction(tracker)
+    KSVD.resetstats!.([tracker], axes(Xhat, 1), sum(fn, Xhat; dims=2))
 
     # @info sum(Xhat), sum(Dhat)
+    timer = TimerOutput()
     nreplaced = KSVD.replace_atoms!(
         KSVD.EnergyBasedReplacement(; beta=1.5, maxreplacements=10,
             proposal_strategy=KSVD.KSVDProposalStrategy()),
