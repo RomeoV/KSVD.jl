@@ -99,6 +99,11 @@ A named tuple containing:
 function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100);
     ksvd_update_method=BatchedParallelKSVD{false,T}(; shuffle_indices=true, batch_size_per_thread=1),
     sparse_coding_method=ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+    dictionary_tracking_method=EWMAUsageTracking(n_atoms),
+    dictionary_replacement_strategy=NoReplacement(),
+    # EnergyBasedReplacement(; beta=1.5, maxreplacements=10,
+    # proposal_strategy=KSVDProposalStrategy(; ndicts=10, nnzpercol=3)),
+    replacement_warmup_iters::Int=3,
     minibatch_size=nothing,
     D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
     # termination conditions
@@ -120,7 +125,11 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         D = (isnothing(D_init) ? init_dictionary(T, emb_dim, n_atoms) : copy(D_init))  # size(D) == (n, K)
         @assert all(≈(1.0), norm.(eachcol(D)))
     end
-    X = sparse_coding(sparse_coding_method, Y, D; timer)
+    DtD = D' * D
+    DtY = D' * Y
+    X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
+    update!(dictionary_tracking_method, X)
+    E = fasterror!(similar(Y), Y, D, X; timer)
 
     Y_ = !isnothing(minibatch_size) ? similar(Y, size(Y, 1), minibatch_size) : similar(Y, 0, 0)
 
@@ -130,12 +139,13 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     norm_results, nnz_per_col_results = Float64[], Float64[]
     # if store_trace || show_trace
     trace_taskref = Ref{Task}()
-    CH_T = Tuple{Int,Matrix{T},SparseMatrixCSC{T,Int64}}
+    CH_T = Tuple{Int,Matrix{T},Matrix{T},Matrix{T},SparseMatrixCSC{T,Int64}}
     loggingtasks = OhMyThreads.StableTasks.StableTask{Nothing}[]
     trace_channel = Channel{CH_T}(maxiters; spawn=true, taskref=trace_taskref) do ch
         # tforeach(ch; scheduler=:greedy) do (iter, D, X)
-        for (iter, D, X) in ch
+        for (iter, E, Y, D, X) in ch
             t = OhMyThreads.@spawn begin
+                # norm_val = (norm.(eachcol(E)) ./ norm.(eachcol(Y))) |> mean
                 norm_val = (norm.(eachcol(Y - D * X)) ./ norm.(eachcol(Y))) |> mean
                 nnz_per_col_val = nnz(X) / size(X, 2)
                 show_trace && @info (iter, norm_val, nnz_per_col_val)
@@ -161,10 +171,28 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         end
         ksvd_update(ksvd_update_method, Y_, D, X_; timer)
         verbose && @info "Starting sparse coding"
-        X = sparse_coding(sparse_coding_method, Y, D; timer)
+        DtD .= D' * D
+        DtY .= D' * Y
+        X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
+
+        update!(dictionary_tracking_method, X)
+        fasterror!(E, Y, D, X)
+
+        if iter > replacement_warmup_iters
+            (verbose && !(dictionary_replacement_strategy isa NoReplacement) &&
+             @info "Starting dictionary replacement")
+            nreplaced = replace_atoms!(
+                dictionary_replacement_strategy,
+                dictionary_tracking_method,
+                Y, D, X,
+                sparse_coding_method;
+                E, DtD, DtY,
+                timer, verbose)
+            verbose && nreplaced > 0 && @info "Replaced $nreplaced dictionaries"
+        end
 
         # put a task to compute the trace / termination conditions.
-        push!(trace_channel, (iter, copy(D), copy(X)))
+        push!(trace_channel, (iter, copy(E), Y, copy(D), copy(X)))
 
         # Check termination conditions.
         # Notice that this is typically not using the most recent results yet. So we might only later realize that we
