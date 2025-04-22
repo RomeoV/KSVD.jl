@@ -95,7 +95,11 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
         close(E_Ω_buf_ch)
         if KSVD.timeit_debug_enabled()
             TimerOutputs.merge!(timer, (merge_all_timers ? collect(timer_ch) : [first(timer_ch)])...;
-                tree_point=collect(descend_timer(timer.prev_timer)))
+                # this `descend_timer` is a terrible crux
+                # because I don't know how to do this better.
+                # This used to be just hard-coded ["KSVD update", "Inner loop"]
+                # but if this is a sub-method to something else it doesn't work.
+                tree_point=collect(descend_timer(timer.prev_timer))[1:end-1])
         end
 
     end # @timeit
