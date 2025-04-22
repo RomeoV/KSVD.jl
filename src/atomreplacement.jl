@@ -79,8 +79,17 @@ function evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn=abs2; t
     return sum(fn, X[end, :])
 end
 
-function proposecandidate(strat, E, Y, D, X, np::Int=min(size(E)...);
-    timer::TimerOutput=TimerOutput(), verbose=false)
+function proposecandidate(strat::ErrorSamplingProposalStrategy, Y, D, X, np::Int=0;
+    timer::TimerOutput=TimerOutput(),
+    E=fasterror!(similar(Y), Y, D, X),
+    verbose=false)
+    @timeit_debug timer "propose candidate (error sampling)" begin
+        m = size(E, 1)
+        errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
+        idx = rand(Categorical(normalize(errs, 1)))
+        return Y[:, idx]
+    end
+end
     m = size(E, 1)
     errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
     p = sortperm(errs, rev=true)
