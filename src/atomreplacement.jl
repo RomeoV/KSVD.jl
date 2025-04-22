@@ -89,7 +89,6 @@ function evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn=abs2; t
                 d_new' * Y]
         end
         X = sparse_coding(sparse_coding_method, Y, D′; DtD=D′tD′, DtY=D′tY, timer)
-        # X = sparse_coding(sparse_coding_method, Y, D′)
         return sum(fn, X[end, :])
     end
 end
@@ -118,7 +117,7 @@ function proposecandidate(strat::KSVDProposalStrategy, Y, D, X, np::Int=min(4 * 
         Ebuf = E[:, p[1:np]]
         (; D, X) = ksvd(Ebuf, strat.ndicts, strat.nnzpercol;
             ksvd_update_method=KSVD.OptimizedKSVD(; shuffle_indices=true),
-            timer, maxiters=50, abstol=1e-3, show_trace=true, verbose,
+            timer, maxiters=10, abstol=1e-3, show_trace=false, verbose=false,
             strat.kwargs...
         )
         _, idx = findmax(sum(abs2, X; dims=2))
@@ -126,16 +125,17 @@ function proposecandidate(strat::KSVDProposalStrategy, Y, D, X, np::Int=min(4 * 
     end
 end
 
-function proposecandidate(strat::TSVDProposalStrategy, E, Y, D, X, np::Int=min(size(E)...);
-    timer::TimerOutput=TimerOutput(), verbose=false
+function proposecandidate(strat::TSVDProposalStrategy, Y, D, X, np::Int=min(4*size(Y, 1), size(Y, 2));
+    timer::TimerOutput=TimerOutput(), verbose=false, E=fasterror!(similar(Y), Y, D, X),
 )
-
-    m = size(E, 1)
-    errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
-    p = sortperm(errs, rev=true)
-    Ebuf = E[:, p[1:np]]
-    U, S, Vt = compute_truncated_svd(ArnoldiSVDSolver{eltype(Ebuf)}(), Ebuf, 1)
-    return U[:, 1]
+    @timeit_debug timer "tsvd proposal" begin
+        m = size(E, 1)
+        errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
+        p = sortperm(errs, rev=true)
+        Ebuf = E[:, p[1:np]]
+        U, S, Vt = compute_truncated_svd(ArnoldiSVDSolver{eltype(Ebuf)}(), Ebuf, 1)
+        return U[:, 1]
+    end
 end
 
 function replaceatom!(D, idx, d_new, Y; timer=TimerOutput(), DtD=nothing, DtY=nothing)
@@ -169,7 +169,8 @@ end
 # Method for NoReplacement strategy
 function replace_atoms!(
     strategy::NoReplacement,
-    tracker, Y_batch, D, X_batch, sparse_coding_method, timer; verbose=false
+    tracker, Y_batch, D, X, sparse_coding_method; timer=TimerOutput(), E=nothing, DtD=nothing, DtY=nothing,
+    verbose=false
 )
     return 0 # Do nothing
 end
