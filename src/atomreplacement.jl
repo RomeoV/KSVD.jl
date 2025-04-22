@@ -1,3 +1,4 @@
+using Distributions
 
 abstract type AbstractDictionaryTrackingMethod end
 @kwdef struct EnergyBasedReplacement <: AbstractDictionaryTrackingMethod
@@ -53,7 +54,7 @@ function replace_atoms!(
         # E = Y - D * X
 
         energy_old, idx = findmin(values(tracker))
-        d_new = proposecandidate(strategy.proposal_strategy, E, Y, D, X; timer, verbose)
+        d_new = proposecandidate(strategy.proposal_strategy, Y, D, X; timer, verbose, E)
         energy_new = evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn; timer, DtD, DtY)
 
         @show (energy_new, energy_old)
