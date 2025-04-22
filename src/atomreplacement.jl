@@ -90,6 +90,31 @@ function proposecandidate(strat::ErrorSamplingProposalStrategy, Y, D, X, np::Int
         return Y[:, idx]
     end
 end
+
+function proposecandidate(strat::KSVDProposalStrategy, Y, D, X, np::Int=min(4 * size(Y, 1), size(Y, 2));
+    timer::TimerOutput=TimerOutput(),
+    E=fasterror!(similar(Y), Y, D, X),
+    verbose=false
+)
+    @timeit_debug timer "propose candidate (ksvd proposal)" begin
+        m = size(E, 1)
+        errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
+        p = sortperm(errs, rev=true)
+        Ebuf = E[:, p[1:np]]
+        (; D, X) = ksvd(Ebuf, strat.ndicts, strat.nnzpercol;
+            ksvd_update_method=KSVD.OptimizedKSVD(; shuffle_indices=true),
+            timer, maxiters=50, abstol=1e-3, show_trace=true, verbose,
+            strat.kwargs...
+        )
+        _, idx = findmax(sum(abs2, X; dims=2))
+        return D[:, idx]
+    end
+end
+
+function proposecandidate(strat::TSVDProposalStrategy, E, Y, D, X, np::Int=min(size(E)...);
+    timer::TimerOutput=TimerOutput(), verbose=false
+)
+
     m = size(E, 1)
     errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
     p = sortperm(errs, rev=true)
