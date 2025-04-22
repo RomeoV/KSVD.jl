@@ -221,8 +221,9 @@ end
 const dictionary_learning = ksvd  # for compatibility
 
 @compile_workload begin
-    ksvd(rand(Float32, 10, 20), 15; maxiters=2)
-    ksvd(rand(Float64, 10, 20), 15; maxiters=2)
+    for T in [Float32, Float64]
+        ksvd(randn(T, 20, 40), 15; maxiters=2)
+    end
 end
 
 end # module
