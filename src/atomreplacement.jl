@@ -100,9 +100,9 @@ function proposecandidate(strat::ErrorSamplingProposalStrategy, Y, D, X, np::Int
     verbose=false)
     @timeit_debug timer "propose candidate (error sampling)" begin
         m = size(E, 1)
-        errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
+        errs = norm.(eachcol(E)) ./ norm.(eachcol(Y))
         idx = rand(Categorical(normalize(errs, 1)))
-        return Y[:, idx]
+        return normalize(Y[:, idx])
     end
 end
 
