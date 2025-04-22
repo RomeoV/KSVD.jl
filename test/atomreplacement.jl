@@ -4,6 +4,9 @@ using Random
 using LinearAlgebra
 using Test
 using Distributions
+using KSVD
+using TimerOutputs
+
 
 
 m, n = 2 * 64, 2 * 256
@@ -168,8 +171,10 @@ for ndicts in 1:3
         Dhat,
         Xhat,
         KSVD.ParallelMatchingPursuit(; max_nnz=nnzpercol);
-        E=Ehat
+        E=Ehat,
+        timer
     )
+    println(timer)
     @test ndicts == nreplaced
     @info nreplaced
 end
