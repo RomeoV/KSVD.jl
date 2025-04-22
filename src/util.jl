@@ -3,6 +3,7 @@ import SparseArrays: sparsevec
 import Random: AbstractRNG, default_rng
 import Distributions: Binomial, quantile
 import Base._typed_hcat
+import Base.values
 
 "Helper for `@threads for (i, idx) in enumerate(indices)` use case."
 const cenumerate = collect ∘ enumerate
@@ -78,8 +79,7 @@ end
 reorient!(vec::AbstractVector) = vec .*= sign(first(vec))
 reorient(vec::AbstractVector) = vec .* sign(first(vec))
 
-function
-Base._typed_hcat(::Type{T}, A::Base.AbstractVecOrTuple{SparseVector{T,Idx_t}}) where {T,Idx_t}
+function Base._typed_hcat(::Type{T}, A::Base.AbstractVecOrTuple{SparseVector{T,Idx_t}}) where {T,Idx_t}
     K = length(first(A))
     N = length(A)
     X = let
