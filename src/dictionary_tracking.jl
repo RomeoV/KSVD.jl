@@ -68,7 +68,7 @@ end
 
 energyfunction(::EWMAUsageTracking{fn}) where {fn} = fn
 
-function update!(method::EWMAUsageTracking{fn}, X::AbstractMatrix) where {fn}
+function update!(method::EWMAUsageTracking{fn}, X::AbstractSparseMatrix) where {fn}
     length(method.stats) == size(X, 1) || error("Mismatch between X rows ($(size(X,1))) and tracker size ($(length(method.stats))).")
     energies = sum(fn, X; dims=2)
     fit!.(method.stats, energies)
