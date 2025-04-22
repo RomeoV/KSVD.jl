@@ -12,10 +12,9 @@ nnzpercol = 5
 T = Float32
 
 Dgt = KSVD.init_dictionary(Float32, m, n)
-Xgt = stack(
-    (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
-     for _ in 1:nsamples);
-    dims=2)
+Xgt = reduce(hcat,
+    [SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
+     for _ in 1:nsamples]);
 Ygt = Dgt * Xgt
 Ymeas = Ygt + T(0.05) * randn(T, size(Ygt))
 
@@ -51,10 +50,9 @@ KSVD.replaceatom!(Dhat, idx, d_new, Ymeas; DtD, DtY)
 
 let
     Dgt = KSVD.init_dictionary(Float32, m, n)
-    Xgt = stack(
-        (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
-         for _ in 1:nsamples);
-        dims=2)
+    Xgt = reduce(hcat,
+        [SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
+         for _ in 1:nsamples])
     Ygt = Dgt * Xgt
     Ymeas = Ygt + T(0.0) * randn(T, size(Ygt))
 
@@ -99,10 +97,9 @@ nnzpercol = 40
 T = Float32
 for ndicts in 1:5
     Dgt = KSVD.init_dictionary(Float32, m, n)
-    Xgt = stack(
-        (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), 1 .+ rand(T, nnzpercol))
-         for _ in 1:nsamples);
-        dims=2)
+    Xgt = reduce(hcat,
+        [SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), 1 .+ rand(T, nnzpercol))
+         for _ in 1:nsamples])
     Ygt = Dgt * Xgt
     Ymeas = Ygt + T(0.00) * randn(T, size(Ygt))
 
@@ -134,16 +131,17 @@ for ndicts in 1:5
     @info nreplaced
 end
 
-m, n = 2*1024, 4 * 2*1024
+m, n = 2 * 1024, 4 * 2 * 1024
 nsamples = 64_000
+# m, n = 1024, 4 * 1024
+# nsamples = 32_000
 nnzpercol = 40
 T = Float32
 for ndicts in 1:3
     Dgt = KSVD.init_dictionary(Float32, m, n)
-    Xgt = stack(
-        (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), 1 .+ rand(T, nnzpercol))
-         for _ in 1:nsamples);
-        dims=2)
+    Xgt = reduce(hcat,
+        [SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), 1 .+ rand(T, nnzpercol))
+         for _ in 1:nsamples])
     Ygt = Dgt * Xgt
     Ymeas = Ygt + T(0.01) * randn(T, size(Ygt))
 
