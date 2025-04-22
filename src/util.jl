@@ -94,3 +94,10 @@ Base._typed_hcat(::Type{T}, A::Base.AbstractVecOrTuple{SparseVector{T,Idx_t}}) w
         sparse(I, J, V, K, N)
     end
 end
+
+function descend_timer(::Nothing)
+    return ()
+end
+function descend_timer(timer)
+    return (timer.name, descend_timer(timer.prev_timer)...)
+end
