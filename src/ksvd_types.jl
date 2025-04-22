@@ -5,7 +5,7 @@ struct LegacyKSVD <: KSVDMethod end
 @kwdef struct OptimizedKSVD{SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     shuffle_indices::Bool = false
     svd_solver::SVDSol = ArnoldiSVDSolver{Float32}()
-    OptimizedKSVD(shuffle_indices, svd_solver) = new{ArnoldiSolver{Float32}}(shuffle_indices, svd_solver)
+    OptimizedKSVD(shuffle_indices, svd_solver) = new{ArnoldiSVDSolver{Float32}}(shuffle_indices, svd_solver)
 end
 
 @kwdef mutable struct ParallelKSVD{precompute_error,T,Scheduler<:OhMyThreads.Scheduler,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
