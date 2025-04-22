@@ -8,6 +8,15 @@ end
 
 struct NoReplacement <: AbstractDictionaryTrackingMethod end
 
+abstract type AbstractProposalStrategy end
+struct TSVDProposalStrategy <: AbstractProposalStrategy end
+@kwdef struct KSVDProposalStrategy <: AbstractProposalStrategy
+    ndicts::Int = 10
+    nnzpercol::Int = 3
+    kwargs = (;)
+end
+struct ErrorSamplingProposalStrategy <: AbstractProposalStrategy end
+
 function fasterror!(E, Y, D, X; timer::TimerOutput=TimerOutput())
     @timeit_debug timer "compute fast error" begin
         E .= copy(Y)
