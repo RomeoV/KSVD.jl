@@ -54,11 +54,20 @@ function replace_atoms!(
             # E = Y - D * X
 
             energy_old, idx = findmin(values(tracker))
-            d_new = proposecandidate(strategy.proposal_strategy, Y, D, X; timer, verbose, E)
-            energy_new = evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn; timer, DtD, DtY)
+            Yidx_lhs = 1:(size(Y, 2)÷2)
+            Yidx_rhs = (size(Y, 2)÷2+1):size(Y, 2)
+            d_new = let Y = (@view Y[:, Yidx_lhs]), X = X[:, Yidx_lhs], E = E[:, Yidx_lhs]
+                proposecandidate(strategy.proposal_strategy,
+                    Y, D, X, size(Y, 2);
+                    timer, verbose, E)
+            end
+            energy_new = let Y = (@view Y[:, Yidx_rhs]), DtY = (@view DtY[:, Yidx_rhs])
+                evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn;
+                    timer, DtD, DtY)
+            end
 
             verbose && @info (energy_new, energy_old)
-            if energy_new > strategy.beta * energy_old
+            if energy_new > strategy.beta * energy_old * (length(Yidx_rhs) / size(Y, 2))
                 # (d_old, X_old) = D[:, idx], copy(X)
                 replaceatom!(D, idx, d_new, Y; timer, DtD, DtY)
                 X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
