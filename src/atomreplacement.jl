@@ -49,31 +49,26 @@ function replace_atoms!(
         fn = energyfunction(tracker)
 
         for attempt in 1:strategy.maxreplacements
-            # DtD = D' * D
-            # DtY = D' * Y
-            # E = Y - D * X
-
             energy_old, idx = findmin(values(tracker))
-            Yidx_lhs = 1:(size(Y, 2)÷2)
-            Yidx_rhs = (size(Y, 2)÷2+1):size(Y, 2)
-            d_new = let Y = (@view Y[:, Yidx_lhs]), X = X[:, Yidx_lhs], E = E[:, Yidx_lhs]
+            (Yidx_lhs, Yidx_rhs) = chunks(axes(Y, 2); n=2)
+            d_new = let Y = @view(Y[:, Yidx_lhs]), X = X[:, Yidx_lhs], E = @view(E[:, Yidx_lhs])
                 proposecandidate(strategy.proposal_strategy,
                     Y, D, X, size(Y, 2);
                     timer, verbose, E)
             end
-            energy_new = let Y = (@view Y[:, Yidx_rhs]), DtY = (@view DtY[:, Yidx_rhs])
-                evaluate_candidate_energy(d_new, Y, D, sparse_coding_method, fn;
-                    timer, DtD, DtY)
-            end
+            (D′, D′tD′, D′tY) = (copy(D), copy(DtD), copy(DtY))
+            replaceatom!(D′, idx, d_new, Y; timer, DtD=D′tD′, DtY=D′tY)
+            X′ = sparse_coding(sparse_coding_method, Y, D′; DtD=D′tD′, DtY=D′tY, timer)
+            energy_new = sum(fn, X′[idx, Yidx_rhs])
 
             verbose && @info (energy_new, energy_old)
             if energy_new > strategy.beta * energy_old * (length(Yidx_rhs) / size(Y, 2))
-                # (d_old, X_old) = D[:, idx], copy(X)
-                replaceatom!(D, idx, d_new, Y; timer, DtD, DtY)
-                X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
+                D .= D′
+                X .= X′
+                DtD .= D′tD′
+                DtY .= D′tY
 
                 fasterror!(E, Y, D, X; timer)
-                # updateerror!(E, Y, D, d_old, d_new, X_old, X, idx)
                 resetstats!(tracker, idx, energy_new)
                 num_replaced += 1
             else
@@ -138,9 +133,8 @@ function proposecandidate(strat::TSVDProposalStrategy, Y, D, X, np::Int=min(size
     @timeit_debug timer "tsvd proposal" begin
         m = size(E, 1)
         errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
-        Ebuf = E
-        # p = sortperm(errs, rev=true)
-        # Ebuf = E[:, p[1:np]]
+        p = sortperm(errs, rev=true)
+        Ebuf = E[:, p[1:np]]
         U, S, Vt = compute_truncated_svd(ArnoldiSVDSolver{eltype(Ebuf)}(), Ebuf, 1)
         return U[:, 1]
     end
