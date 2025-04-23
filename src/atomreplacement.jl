@@ -59,10 +59,10 @@ function replace_atoms!(
             (D′, D′tD′, D′tY) = (copy(D), copy(DtD), copy(DtY))
             replaceatom!(D′, idx, d_new, Y; timer, DtD=D′tD′, DtY=D′tY)
             X′ = sparse_coding(sparse_coding_method, Y, D′; DtD=D′tD′, DtY=D′tY, timer)
-            energy_new = sum(fn, X′[idx, Yidx_rhs])
+            energy_new = sum(fn, X′[idx, Yidx_rhs]) * inv(length(Yidx_rhs) / size(Y, 2))
 
             verbose && @info (idx, energy_new, energy_old)
-            if energy_new > strategy.beta * energy_old * (length(Yidx_rhs) / size(Y, 2))
+            if energy_new > strategy.beta * energy_old
                 D .= D′
                 X .= X′
                 DtD .= D′tD′
