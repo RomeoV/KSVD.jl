@@ -61,7 +61,7 @@ function replace_atoms!(
             X′ = sparse_coding(sparse_coding_method, Y, D′; DtD=D′tD′, DtY=D′tY, timer)
             energy_new = sum(fn, X′[idx, Yidx_rhs])
 
-            verbose && @info (energy_new, energy_old)
+            verbose && @info (idx, energy_new, energy_old)
             if energy_new > strategy.beta * energy_old * (length(Yidx_rhs) / size(Y, 2))
                 D .= D′
                 X .= X′
