@@ -125,14 +125,15 @@ function proposecandidate(strat::KSVDProposalStrategy, Y, D, X, np::Int=min(4 * 
     end
 end
 
-function proposecandidate(strat::TSVDProposalStrategy, Y, D, X, np::Int=min(4*size(Y, 1), size(Y, 2));
+function proposecandidate(strat::TSVDProposalStrategy, Y, D, X, np::Int=min(size(Y)...);
     timer::TimerOutput=TimerOutput(), verbose=false, E=fasterror!(similar(Y), Y, D, X),
 )
     @timeit_debug timer "tsvd proposal" begin
         m = size(E, 1)
         errs = norm.(eachcol(E)) ./ norm(eachcol(Y))
-        p = sortperm(errs, rev=true)
-        Ebuf = E[:, p[1:np]]
+        Ebuf = E
+        # p = sortperm(errs, rev=true)
+        # Ebuf = E[:, p[1:np]]
         U, S, Vt = compute_truncated_svd(ArnoldiSVDSolver{eltype(Ebuf)}(), Ebuf, 1)
         return U[:, 1]
     end
