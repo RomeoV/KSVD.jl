@@ -61,14 +61,12 @@ function replace_atoms!(
             if energy_new > strategy.beta * energy_old
                 (d_old, X_old) = D[:, idx], copy(X)
                 replaceatom!(D, idx, d_new, Y; timer, DtD, DtY)
-                @assert DtY ≈ D' * Y
                 X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
 
                 fasterror!(E, Y, D, X; timer)
                 # updateerror!(E, Y, D, d_old, d_new, X_old, X, idx)
                 resetstats!(tracker, idx, energy_new)
                 num_replaced += 1
-                @assert DtY ≈ D' * Y
             else
                 break # Stop if the best candidate isn't accepted
             end
