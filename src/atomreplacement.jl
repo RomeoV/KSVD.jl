@@ -3,7 +3,7 @@ using Distributions
 abstract type AbstractDictionaryTrackingMethod end
 @kwdef struct EnergyBasedReplacement <: AbstractDictionaryTrackingMethod
     beta::Float64 = 2
-    proposal_strategy = ()
+    proposal_strategy = KSVD.TSVDProposalStrategy()
     maxreplacements::Int = 5
 end
 
