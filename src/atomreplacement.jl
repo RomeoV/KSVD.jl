@@ -42,7 +42,27 @@ end
 """
     replace_atoms!(strategy::AbstractAtomReplacementStrategy, tracker, ...)
 
-Main dispatch function for atom replacement strategies.
+Replace atoms in the dictionary `D` based on the given `strategy`.
+The main steps are:
+1. find candidate atom to replace using `tracker`
+2. propose new atom using `strategy`
+3. compute energy of proposed atom
+4. compare energy of proposed atom to energy of candidate atom
+5. if accept, replace atom, recompute X, recompute buffers, repeat
+6. else, break
+
+# Arguments
+- `strategy`: The atom replacement strategy to use.
+- `tracker`: A method for tracking dictionary statistics (e.g., atom energy).
+- `Y`: The current batch of data.
+- `D`: The dictionary matrix.
+- `X`: The sparse coding matrix.
+- `sparse_coding_method`: The method used for sparse coding.
+- `timer`: An optional `TimerOutput` to track performance.
+- `verbose`: Whether to print verbose output.
+
+# Returns
+The number of atoms replaced.
 """
 function replace_atoms!(
     strategy::EnergyBasedReplacement,
