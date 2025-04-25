@@ -127,8 +127,8 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     end
     DtD = D' * D
     DtY = D' * Y
-    X = sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY)
-    update!(dictionary_tracking_method, X)
+    X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY) : copy(X_init))
+    # update!(dictionary_tracking_method, X)
     E = fasterror!(similar(Y), Y, D, X; timer)
 
     Y_ = !isnothing(minibatch_size) ? similar(Y, size(Y, 1), minibatch_size) : similar(Y, 0, 0)
