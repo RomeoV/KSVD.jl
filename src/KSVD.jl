@@ -94,23 +94,24 @@ A named tuple containing:
 - To enable timing outputs, run `TimerOutputs.enable_debug_timings(KSVD)`.
 - To set the number of nonzeros, specify e.g. `sparse_coding_method=ParallelMatchingPursuit(; max_nnz=..., rtol=5e-2)`.
 """
-function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms÷100);
-              ksvd_update_method = BatchedParallelKSVD{false, T}(; shuffle_indices=true, batch_size_per_thread=1),
-              sparse_coding_method = ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
-              minibatch_size=nothing,
-              D_init::Union{Nothing, <:AbstractMatrix{T}} = nothing,
-              # termination conditions
-              maxiters::Int=100,
-              maxtime::Union{Nothing, <:Real}=nothing,
-              abstol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
-              reltol::Union{Nothing, <:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
-              nnz_per_col_target::Number=0.0,
-              # tracing options
-              show_trace::Bool=false,
-              callback_fn::Union{Nothing, Function}=nothing,
-              verbose=false,
-              ) where T
-    timer = TimerOutput()
+function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100);
+    ksvd_update_method=BatchedParallelKSVD{false,T}(; shuffle_indices=true, batch_size_per_thread=1),
+    sparse_coding_method=ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+    minibatch_size=nothing,
+    D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
+    X_init::Union{Nothing,<:AbstractSparseMatrix}=nothing,
+    # termination conditions
+    maxiters::Int=100,
+    maxtime::Union{Nothing,<:Real}=nothing,
+    abstol::Union{Nothing,<:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
+    reltol::Union{Nothing,<:Real}=real(oneunit(T)) * (eps(real(one(T))))^(4 // 5),
+    nnz_per_col_target::Number=0.0,
+    # tracing options
+    show_trace::Bool=false,
+    callback_fn::Union{Nothing,Function}=nothing,
+    verbose=false,
+    timer::TimerOutput=TimerOutput()
+) where {T}
     emb_dim, n_samples = size(Y)
 
     # D is a dictionary matrix that contains atoms for columns.
