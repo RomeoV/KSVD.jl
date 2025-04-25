@@ -106,6 +106,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     replacement_warmup_iters::Int=3,
     minibatch_size=nothing,
     D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
+    X_init::Union{Nothing,<:AbstractSparseMatrix}=nothing,
     # termination conditions
     maxiters::Int=100,
     maxtime::Union{Nothing,<:Real}=nothing,
