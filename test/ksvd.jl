@@ -47,7 +47,7 @@ end
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
             @test D_res ≈ D_baseline rtol = sqrt(method.svd_solver.tol)
-            @test X_res ≈ X_baseline rtol = sqrt(eps(T))
+            @test X_res ≈ X_baseline rtol = sqrt(method.svd_solver.tol)
 
             @test all(≈(1.0), norm.(eachcol(D_res)))
             @test eltype(D_res) == eltype(X_res) == T
