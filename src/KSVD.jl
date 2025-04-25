@@ -112,6 +112,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     verbose=false,
     timer::TimerOutput=TimerOutput()
 ) where {T}
+    @assert all(isfinite, Y) "All elements in Y must be finite. Probably there are some NaN or Inf."
     emb_dim, n_samples = size(Y)
 
     # D is a dictionary matrix that contains atoms for columns.
