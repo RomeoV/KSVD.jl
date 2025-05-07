@@ -163,8 +163,9 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         else
             (Y, X)
         end
-        ksvd_loop!(ksvd_loop_type, ksvd_update_method, sparse_coding_method,
-                   Y, Y_, D, X_; timer, verbose)
+        # note that D gets updated in place
+        X = ksvd_loop!(ksvd_loop_type, ksvd_update_method, sparse_coding_method,
+            Y, Y_, D, X_; timer, verbose)
 
         # put a task to compute the trace / termination conditions.
         push!(trace_channel, (iter, copy(D), copy(X)))
