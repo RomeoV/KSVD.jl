@@ -141,7 +141,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         # tforeach(ch; scheduler=:greedy) do (iter, D, X)
         for (iter, D, X) in ch
             t = OhMyThreads.@spawn begin
-                norm_val = (norm.(eachcol(Y - D * X)) ./ norm.(eachcol(Y))) |> mean
+                norm_val = (norm.(eachcol(Y - D * X)) ./ (norm.(eachcol(Y)) .+ eps(T))) |> mean
                 nnz_per_col_val = nnz(X) / size(X, 2)
                 show_trace && @info (iter, norm_val, nnz_per_col_val)
                 (push!(norm_results, norm_val); push!(nnz_per_col_results, nnz_per_col_val))
