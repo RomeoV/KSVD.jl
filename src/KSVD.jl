@@ -130,16 +130,16 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     # progressbar = Progress(maxiter)
     maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, n_samples)
 
-    norm_results, nnz_per_col_results = Float64[], Float64[];
+    norm_results, nnz_per_col_results = Float64[], Float64[]
     # if store_trace || show_trace
     trace_taskref = Ref{Task}()
-    CH_T = Tuple{Int, Matrix{T}, SparseMatrixCSC{T, Int64}}
+    CH_T = Tuple{Int,Matrix{T},SparseMatrixCSC{T,Int64}}
     loggingtasks = OhMyThreads.StableTasks.StableTask{Nothing}[]
     trace_channel = Channel{CH_T}(maxiters; spawn=true, taskref=trace_taskref) do ch
         # tforeach(ch; scheduler=:greedy) do (iter, D, X)
         for (iter, D, X) in ch
             t = OhMyThreads.@spawn begin
-                norm_val = (norm.(eachcol(Y - D*X)) ./ norm.(eachcol(Y))) |> mean
+                norm_val = (norm.(eachcol(Y - D * X)) ./ norm.(eachcol(Y))) |> mean
                 nnz_per_col_val = nnz(X) / size(X, 2)
                 show_trace && @info (iter, norm_val, nnz_per_col_val)
                 (push!(norm_results, norm_val); push!(nnz_per_col_results, nnz_per_col_val))
@@ -173,13 +173,17 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         # Notice that this is typically not using the most recent results yet. So we might only later realize that we
         # should terminate.
         if iter == maxiters
-            termination_condition = :maxiter; break
+            termination_condition = :maxiter
+            break
         elseif !isnothing(maxtime) && (time() - tic) > maxtime
-            termination_condition = :maxtime; break
+            termination_condition = :maxtime
+            break
         elseif (!isnothing(abstol) && !isnothing(reltol)) && length(norm_results) > 1 && isapprox(norm_results[end], norm_results[end-1]; atol=abstol, rtol=reltol)
-            termination_condition = :converged; break
+            termination_condition = :converged
+            break
         elseif !isempty(nnz_per_col_results) && last(nnz_per_col_results) <= nnz_per_col_target
-            termination_condition = :nnz_per_col_target; break
+            termination_condition = :nnz_per_col_target
+            break
         end
     end
     close(trace_channel)
