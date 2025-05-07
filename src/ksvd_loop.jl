@@ -58,6 +58,7 @@ function ksvd_loop!(
         ksvd_update(ksvd_update_method, E, D′, X′; timer)
         E .-= D′ * X′
     end
+    verbose && @info "Running sparse coding"
     X = sparse_coding(sparse_coding_method, Y, D; timer)
     return X
 end
