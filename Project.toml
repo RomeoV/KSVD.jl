@@ -3,6 +3,7 @@ uuid = "778123d0-3295-4563-8004-fb5c576fbcd9"
 version = "1.13.5"
 
 [deps]
+Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
@@ -30,6 +31,7 @@ DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
 KSVDCudaExt = "CUDA"
 
 [compat]
+Accessors = "0.1.42"
 ArnoldiMethod = "0.4.0"
 Arpack = "0.5.4"
 CUDA = "5"
