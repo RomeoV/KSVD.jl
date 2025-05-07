@@ -100,7 +100,6 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     ksvd_update_method=BatchedParallelKSVD{false,T}(; shuffle_indices=true, batch_size_per_thread=1),
     sparse_coding_method=ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
     ksvd_loop_type::KSVDLoopType=NormalLoop(),
-    minibatch_size=nothing,
     D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
     X_init::Union{Nothing,<:AbstractSparseMatrix}=nothing,
     # termination conditions
@@ -126,8 +125,6 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     DtD = D' * D
     DtY = D' * Y
     X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY) : copy(X_init))
-
-    Y_ = !isnothing(minibatch_size) ? similar(Y, size(Y, 1), minibatch_size) : similar(Y, 0, 0)
 
     # progressbar = Progress(maxiter)
     maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, n_samples)
@@ -155,17 +152,9 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     termination_condition = :nothing
     tic = time()
     for iter in 1:maxiters
-        (Y_, X_) = if !isnothing(minibatch_size)
-            minibatch_indices = sort(shuffle(axes(Y, 2))[1:minibatch_size])
-            Y_ .= Y[:, minibatch_indices]
-            X_ = X[:, minibatch_indices]
-            (Y_, X_)
-        else
-            (Y, X)
-        end
         # note that D gets updated in place
         X = ksvd_loop!(ksvd_loop_type, ksvd_update_method, sparse_coding_method,
-            Y, Y_, D, X_; timer, verbose)
+            Y, D, X; timer, verbose)
 
         # put a task to compute the trace / termination conditions.
         push!(trace_channel, (iter, copy(D), copy(X)))
