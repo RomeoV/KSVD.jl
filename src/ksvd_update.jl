@@ -177,7 +177,7 @@ end
 function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{true}, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer=TimerOutput())
     @timeit_debug timer "compute E_Ω" begin
 
-        if size(E_Ω_buf, 2) <= length(ωₖ)
+        if size(E_Ω_buf, 2) < length(ωₖ)
             @warn """
             The preallocated error buffer is too small: $(size(E_Ω_buf, 2)) vs $(length(ωₖ)). Not all errors will be computed. This is probably because
             `maybe_init_buffer!` has been called with a ratio_nonzero that's too small. Try setting it to `1`.
@@ -200,7 +200,7 @@ end
 function compute_E_Ω!(::ThreadedKSVDMethodPrecomp{false}, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer=TimerOutput())
     @timeit_debug timer "compute E_Ω" begin
 
-        if size(E_Ω_buf, 2) <= length(ωₖ)
+        if size(E_Ω_buf, 2) < length(ωₖ)
             @warn """
             The preallocated error buffer is too small. Not all errors will be computed. This is probably because
             `maybe_init_buffer!` has been called with a ratio_nonzero that's too small. Try setting it to `1`.
