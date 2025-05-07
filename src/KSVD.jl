@@ -35,6 +35,7 @@ include("ksvd_update_legacy.jl")
 include("ksvd_update_optimized.jl")
 include("ksvd_update_threaded_utils.jl")
 include("atomreplacement.jl")
+include("ksvd_loop.jl")
 function __init__()
     set_num_threads(Threads.nthreads())
 end
@@ -98,6 +99,7 @@ A named tuple containing:
 function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100);
     ksvd_update_method=BatchedParallelKSVD{false,T}(; shuffle_indices=true, batch_size_per_thread=1),
     sparse_coding_method=ParallelMatchingPursuit(; max_nnz, rtol=5e-2),
+    ksvd_loop_type::KSVDLoopType=NormalLoop(),
     minibatch_size=nothing,
     D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
     X_init::Union{Nothing,<:AbstractSparseMatrix}=nothing,
@@ -153,7 +155,6 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     termination_condition = :nothing
     tic = time()
     for iter in 1:maxiters
-        verbose && @info "Starting svd"
         (Y_, X_) = if !isnothing(minibatch_size)
             minibatch_indices = sort(shuffle(axes(Y, 2))[1:minibatch_size])
             Y_ .= Y[:, minibatch_indices]
@@ -162,9 +163,8 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         else
             (Y, X)
         end
-        ksvd_update(ksvd_update_method, Y_, D, X_; timer)
-        verbose && @info "Starting sparse coding"
-        X = sparse_coding(sparse_coding_method, Y, D; timer)
+        ksvd_loop!(ksvd_loop_type, ksvd_update_method, sparse_coding_method,
+                   Y, Y_, D, X_; timer, verbose)
 
         # put a task to compute the trace / termination conditions.
         push!(trace_channel, (iter, copy(D), copy(X)))
