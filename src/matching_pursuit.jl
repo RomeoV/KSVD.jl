@@ -226,7 +226,7 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
     for i in 1:max_iter
         # @assert(norm(residual)) && @show norm(residual), residual
         # @assert(isfinite(norm_data))
-        if norm(residual) / norm_data < rtol
+        if norm(residual) == 0 || norm(residual) / norm_data < rtol
             return sparsevec(xdict, n_atoms)
         end
         if length(xdict) > max_nnz
