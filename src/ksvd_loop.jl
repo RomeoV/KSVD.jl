@@ -79,7 +79,9 @@ constructM(K; log2min=6) =
         end
     end
 
-function sparse_coding_matryoshka(Y::AbstractMatrix{T}, D, max_nnz; log2min=8) where {T}
+function sparse_coding_matryoshka(Y::AbstractMatrix{T}, D, max_nnz;
+    log2min=8, DtD=D' * D, DtY=D' * Y) where {T}
+
     sparse_coding_method = ParallelMatchingPursuit(; max_nnz)
     E = copy(Y)
     X_slices = SparseMatrixCSC{T}[]
@@ -91,7 +93,9 @@ function sparse_coding_matryoshka(Y::AbstractMatrix{T}, D, max_nnz; log2min=8) w
 
     for midx in Msets
         D′ = @view D[:, midx]
-        X′ = sparse_coding(sparse_coding_method′, E, D′)
+        D′tD′ = @view DtD[midx, midx]
+        D′tY = @view DtY[midx, :]
+        X′ = sparse_coding(sparse_coding_method′, E, D′; DtD=D′tD′, DtY=D′tY)
         E .-= D′ * X′
         push!(X_slices, X′)
     end
