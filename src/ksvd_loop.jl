@@ -78,3 +78,23 @@ constructM(K; log2min=6) =
             (lhs+1):rhs
         end
     end
+
+function sparse_coding_matryoshka(Y::AbstractMatrix{T}, D, max_nnz; log2min=8) where {T}
+    sparse_coding_method = ParallelMatchingPursuit(; max_nnz)
+    E = copy(Y)
+    X_slices = SparseMatrixCSC{T}[]
+
+    Msets = constructM(size(D, 2); log2min)
+    nnzbudget = sparse_coding_method.max_nnz
+    localnnzbudget = round(Int, nnzbudget / length(Msets))
+    sparse_coding_method′ = @set sparse_coding_method.max_nnz = localnnzbudget
+
+    for midx in Msets
+        D′ = @view D[:, midx]
+        X′ = sparse_coding(sparse_coding_method′, E, D′)
+        E .-= D′ * X′
+        push!(X_slices, X′)
+    end
+    X = reduce(vcat, X_slices)
+    return X
+end
