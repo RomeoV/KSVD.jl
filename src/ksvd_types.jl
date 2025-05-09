@@ -29,7 +29,7 @@ ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
 end
 # Backward compatibility constructor
 BatchedParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
-    BatchedParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver{T}}(; kwargs...)
+    BatchedParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,ArnoldiSVDSolver{T}}(; kwargs...)
 
 @kwdef mutable struct DistributedKSVD{T,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     submethod_per_worker::Dict{Int,<:KSVDMethod} = Dict()
