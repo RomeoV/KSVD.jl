@@ -49,11 +49,15 @@ function ksvd_loop!(
     timer=TimerOutput(),
     verbose=false
 )
-    a = sparse_coding_method.max_nnz / size(D, 2)
     E = copy(Y)
     X_slices = typeof(X)[]
-    for midx in constructM(size(D, 2); log2min=ksvd_loop_method.log2min)
-        sparse_coding_method′ = @set sparse_coding_method.max_nnz = round(Int, a * length(midx))
+
+    Msets = constructM(size(D, 2); log2min=ksvd_loop_method.log2min)
+    nnzbudget = sparse_coding_method.max_nnz
+    localnnzbudget = round(Int, nnzbudget / length(Msets))
+    sparse_coding_method′ = @set sparse_coding_method.max_nnz = localnnzbudget
+
+    for midx in Msets
         D′ = @view D[:, midx]
         X′ = copy(X[midx, :])
         verbose && @info "Running ksvd update for $(midx)"
@@ -64,7 +68,6 @@ function ksvd_loop!(
         push!(X_slices, X′)
     end
     X = reduce(vcat, X_slices)
-    # X = sparse_coding(sparse_coding_method, Y, D; timer)
     return X
 end
 
