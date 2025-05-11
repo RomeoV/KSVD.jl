@@ -157,6 +157,8 @@ function matching_pursuit_(
     # atoms = Vector{T}[]
     b_k = zeros(T, 0)
     v_k = zeros(T, 0)
+    dicts_chosen_buf = zeros(T, size(dictionary, 1), max_nnz)
+    DtD_chosen_buf = zeros(T, size(dictionary, 2), max_nnz)
     # reconstruction = zeros(T, size(data))
 
     # will mask out "used indices" when finding next basis vector
@@ -170,6 +172,10 @@ function matching_pursuit_(
         # find an atom with maximum inner product
         products_abs .= abs.(products)
         _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
+        dicts_chosen_buf[:, i] .= dictionary[:, maxindex]
+        DtD_chosen_buf[:, i] .= DtD[:, maxindex]
+        dicts_chosen = @view dicts_chosen_buf[:, 1:i]
+        DtD_chosen = @view DtD_chosen_buf[:, 1:i]
 
         #==
         # The block matrix inversion updates =A_inv=, which stores =(D_I' * D_I)^-1=, where =D_I= is the sub-dictionary of atoms selected so far (=dictionary[:, inds]=). When a new atom (let's call it =d_new=, corresponding to =dictionary[:, maxindex]=) is added to =D_I=, the matrix =D_I' * D_I= is augmented.
@@ -181,11 +187,11 @@ function matching_pursuit_(
         b_k = A \ v_k
         # A_inv = [(A_inv+beta*(b_k*b_k')) -beta*b_k;
         #     -beta*b_k' beta]
-        A = DtD[[inds; maxindex], [inds; maxindex]]
+        A = @view DtD_chosen[inds, :]
         # A_inv = inv(A)
 
         atom = @view dictionary[:, maxindex]
-        γ_k = atom .- dictionary[:, inds] * b_k
+        γ_k = atom .- @view(dicts_chosen[:, 1:end-1]) * b_k
         α_k = products[maxindex] / sum(abs2, γ_k)
         factors .-= α_k * b_k
 
@@ -193,7 +199,7 @@ function matching_pursuit_(
         push!(factors, α_k)
         # push!(atoms, normalize(γ_k))
         mask[maxindex] = false
-        products .= products_init .- DtD[:, inds] * factors
+        products .= products_init .- DtD_chosen * factors
 
         # reconstruction .+= α_k * atom
         residual .-= α_k * γ_k
