@@ -130,10 +130,16 @@ function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,Ort
     return X
 end
 
-@inbounds function matching_pursuit_(
+"""
+OMP implementation. See Pati 1993
+Orthogonal Matching Pursuit: Recursive Function Approximat ion with Applications to Wavelet Decomposition
+(https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=342465)
+"""
+function matching_pursuit_(
     method::Union{OrthogonalMatchingPursuit},
     data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-    products_init::Union{Nothing,AbstractVector{T}}=nothing) where {T}
+    products_init::Union{Nothing,AbstractVector{T}}=nothing,
+    debug=false) where {T}
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
@@ -141,14 +147,17 @@ end
     # xdict = DefaultDict{Int, T}(zero(T))
     norm_data = norm(data)
 
-    products = (isnothing(products_init) ? (dictionary' * residual) : products_init)
+    products_init = (isnothing(products_init) ? (dictionary' * residual) : products_init)
+    products = copy(products_init)
     products_abs = abs.(products)  # prealloc
-    A_inv = zeros(T, 0, 0)
+    # A_inv = zeros(T, 0, 0)
+    A = zeros(T, 0, 0)
     inds = Int[]
     factors = T[]
+    # atoms = Vector{T}[]
     b_k = zeros(T, 0)
     v_k = zeros(T, 0)
-    reconstruction = zeros(T, size(data))
+    # reconstruction = zeros(T, size(data))
 
     # will mask out "used indices" when finding next basis vector
     mask = ones(Bool, size(products))
@@ -162,24 +171,32 @@ end
         products_abs .= abs.(products)
         _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
 
-        beta = 1 / (1 - v_k' * b_k)
+        #==
+        # The block matrix inversion updates =A_inv=, which stores =(D_I' * D_I)^-1=, where =D_I= is the sub-dictionary of atoms selected so far (=dictionary[:, inds]=). When a new atom (let's call it =d_new=, corresponding to =dictionary[:, maxindex]=) is added to =D_I=, the matrix =D_I' * D_I= is augmented.
+        # This comes from the Sherman-Morrison-Woodbury equation, which inverts $(A + UV^\top)^{-1}$ blockwise.
+        # Here, $A = Diagonal(G_{\rm old}, s)$ and $U=[u_1 u_2]$ and $W=[w_1 w_2]$ with $u_1 = [v; 0]$ and $w_1 = e_{k+1}$ and $u_2 = e_{k+1}$ and $w_2 = [v;0]$.
+        ==#
+        # beta = 1 / (1 - v_k' * b_k)
         v_k = DtD[inds, maxindex]
-        b_k = A_inv * v_k
-        A_inv = [A_inv -beta*b_k;
-            -beta*b_k' 1]
+        b_k = A \ v_k
+        # A_inv = [(A_inv+beta*(b_k*b_k')) -beta*b_k;
+        #     -beta*b_k' beta]
+        A = DtD[[inds; maxindex], [inds; maxindex]]
+        # A_inv = inv(A)
 
         atom = @view dictionary[:, maxindex]
-        γ_k = atom - dictionary[:, inds] * b_k
-        α_k = inv(sum(abs2, γ_k)) * products[maxindex]
+        γ_k = atom .- dictionary[:, inds] * b_k
+        α_k = products[maxindex] / sum(abs2, γ_k)
         factors .-= α_k * b_k
-        products .-= α_k .* @view DtD[:, maxindex]
 
         push!(inds, maxindex)
         push!(factors, α_k)
+        # push!(atoms, normalize(γ_k))
         mask[maxindex] = false
+        products .= products_init .- DtD[:, inds] * factors
 
-        reconstruction .+= α_k * atom
-        residual .-= α_k * atom
+        # reconstruction .+= α_k * atom
+        residual .-= α_k * γ_k
     end
     return SparseArrays.sparsevec(inds, factors, n_atoms)
 end
