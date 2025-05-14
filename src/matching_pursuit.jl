@@ -61,6 +61,13 @@ end
 To be instantiated in extensions, e.g. `CUDAAccelMatchingPursuit`.
 """
 abstract type GPUAcceleratedMatchingPursuit <: SparseCodingMethod end;
+@kwdef struct CUDAAcceleratedMatchingPursuit <: KSVD.GPUAcceleratedMatchingPursuit
+    max_nnz::Int = KSVD.default_max_nnz
+    max_iter::Int = 4 * max_nnz
+    rtol = KSVD.default_rtol
+    precompute_products = true
+    CUDAAcceleratedMatchingPursuit(args...) = (KSVD.validate_mp_args(args...); new(args...))
+end
 
 """ Original implementation by https://github.com/IshitaTakeshi/KSVD.jl.
 Useful for comparison and didactic purposes, but much much slower. """
@@ -165,7 +172,9 @@ function matching_pursuit_(
     # reconstruction = zeros(T, size(data))
 
     # will mask out "used indices" when finding next basis vector
-    mask = ones(Bool, size(products))
+    # mask = ones(Bool, size(products))
+    mask = BitArray(undef, size(products))
+    mask .= 1;
 
     for i in 1:max_nnz
         if norm(residual) / norm_data < rtol
@@ -175,8 +184,8 @@ function matching_pursuit_(
         # find an atom with maximum inner product
         products_abs .= abs.(products)
         _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
-        dicts_chosen_buf[:, i] .= dictionary[:, maxindex]
-        DtD_chosen_buf[:, i] .= DtD[:, maxindex]
+        dicts_chosen_buf[:, i] .= @view dictionary[:, maxindex]
+        DtD_chosen_buf[:, i] .= @view DtD[:, maxindex]
         dicts_chosen = @view dicts_chosen_buf[:, 1:i]
         DtD_chosen = @view DtD_chosen_buf[:, 1:i]
 
@@ -186,7 +195,7 @@ function matching_pursuit_(
         # Here, $A = Diagonal(G_{\rm old}, s)$ and $U=[u_1 u_2]$ and $W=[w_1 w_2]$ with $u_1 = [v; 0]$ and $w_1 = e_{k+1}$ and $u_2 = e_{k+1}$ and $w_2 = [v;0]$.
         ==#
         # beta = 1 / (1 - v_k' * b_k)
-        v_k = DtD[inds, maxindex]
+        v_k = @view DtD[inds, maxindex]
         b_k = A \ v_k
         # A_inv = [(A_inv+beta*(b_k*b_k')) -beta*b_k;
         #     -beta*b_k' beta]
@@ -205,7 +214,7 @@ function matching_pursuit_(
         products .= products_init .- DtD_chosen * factors
 
         # reconstruction .+= α_k * atom
-        residual .-= α_k * γ_k
+        residual .-= α_k .* γ_k
     end
     return SparseArrays.sparsevec(inds, factors, n_atoms)
 end

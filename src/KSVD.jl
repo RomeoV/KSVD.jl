@@ -127,7 +127,15 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer) : copy(X_init))
 
     # progressbar = Progress(maxiter)
-    maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, (isnothing(minibatch_size) ? n_samples : minibatch_size))
+    # in general, we support to preallocate error buffers E_Ω that are not as wide as Y, but instead
+    # rely on X not having fully dense rows. Then, E_Ω would only have as many columns as max_i nnz(X[i, :]).
+    # We model this with a Binomial distribution, and allow putting in the failure chance here.
+    # The aim is that we are more memory efficient, because we don't need an error buffer for every thread.
+    # However, in practice this doesn't work so well, as different rows of X have very different densities.
+    # Therefore, for now we set the "failure_chance" (of the errors fitting in the buffer) to zero,
+    # i.e. we always allocate E_Ω as wide as Y.
+    maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, (isnothing(minibatch_size) ? n_samples : minibatch_size);
+        ratio_nonzero=2 * sparse_coding_method.max_nnz / n_atoms, failure_chance=0.00)
 
     norm_results, nnz_per_col_results = Float64[], Float64[]
     # if store_trace || show_trace

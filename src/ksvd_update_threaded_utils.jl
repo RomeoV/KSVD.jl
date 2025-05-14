@@ -1,9 +1,9 @@
-maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); ratio_nonzero=1.) = nothing
+maybe_init_buffers!(method::KSVDMethod, emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); ratio_nonzero=1., failure_chance=0.) = nothing
 function maybe_init_buffers!(method::Union{ParallelKSVD{precompute_error, T}, BatchedParallelKSVD{precompute_error, T}},
-                             emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); ratio_nonzero=1.) where {precompute_error, T<:Real}
+                             emb_dim, n_dict_vecs, n_samples, timer=TimerOutput(); ratio_nonzero=1., failure_chance=0.) where {precompute_error, T<:Real}
     @timeit_debug timer "init buffers" begin
         precompute_error && (method.E_buf=Matrix{T}(undef, emb_dim, n_samples);)
-        method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, ratio_nonzero)) for _ in 1:KSVD.get_num_threads()]
+        method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, compute_reasonable_buffer_size(n_samples, ratio_nonzero, failure_chance)) for _ in 1:KSVD.get_num_threads()]
         # method.E_Ω_bufs=[Matrix{T}(undef, emb_dim, n_samples) for _ in 1:KSVD.get_num_threads()]
         method.D_cpy_buf=Matrix{T}(undef, emb_dim, n_dict_vecs)
     end
