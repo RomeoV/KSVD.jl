@@ -29,6 +29,13 @@ end
     maxiter::Int = 50
 end
 
+@kwdef struct CUDAAcceleratedArnoldiSVDSolver{T<:Number} <: KSVD.AbstractTruncatedSVD
+    tol::Float64 = 100 * (eps(real(T)))
+    maxiter::Int = 50
+end
+compute_truncated_svd(::CUDAAcceleratedArnoldiSVDSolver, A, k) = error("`CUDAAcceleratedArnoldiSVDSolver not available. Please install and load `CUDA.jl` package first.`")
+
+
 # Solver implementations
 function compute_truncated_svd(solver::TSVDSolver, A::AbstractMatrix{T}, k::Int) where {T}
     tsvd(A, k; tolconv=solver.tol, maxiter=solver.maxiter)
