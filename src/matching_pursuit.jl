@@ -274,9 +274,11 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 end
 
 """ This is the original implementation by https://github.com/IshitaTakeshi, useful for
-numerical comparison and didactic purposes. """
+numerical comparison and didactic purposes.
+`DtD` and `DtY` are just available for API completeness.
+"""
 function sparse_coding(method::LegacyMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T};
-    timer=TimerOutput()) where {T}
+    DtD=nothing, DtY=nothing, timer=TimerOutput()) where {T}
     @timeit_debug timer "Sparse coding" begin
 
         K = size(dictionary, 2)
