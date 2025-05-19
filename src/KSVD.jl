@@ -102,6 +102,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     ksvd_loop_type::KSVDLoopType=NormalLoop(),
     D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
     X_init::Union{Nothing,<:AbstractSparseMatrix}=nothing,
+    minibatch_size=nothing,
     # termination conditions
     maxiters::Int=100,
     maxtime::Union{Nothing,<:Real}=nothing,
@@ -153,8 +154,9 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     tic = time()
     for iter in 1:maxiters
         # note that D gets updated in place
+        yidx = (isnothing(minibatch_size) ? axes(Y, 2) : sort(shuffle(axes(Y, 2))[1:minibatch_size]))
         X = ksvd_loop!(ksvd_loop_type, ksvd_update_method, sparse_coding_method,
-            Y, D, X; timer, verbose)
+            Y, D, X; timer, yidx, verbose)
 
         # put a task to compute the trace / termination conditions.
         push!(trace_channel, (iter, copy(D), copy(X)))

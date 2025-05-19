@@ -31,10 +31,11 @@ function ksvd_loop!(
     D,
     X;
     timer=TimerOutput(),
+    yidx=axes(Y, 2),
     verbose=false
 )
     verbose && @info "Starting svd"
-    ksvd_update(ksvd_update_method, Y, D, X; timer)
+    ksvd_update(ksvd_update_method, maybeview(Y, :, yidx), D, X[:, yidx]; timer)
     verbose && @info "Starting sparse coding"
     X = sparse_coding(sparse_coding_method, Y, D; timer)
 end
@@ -47,6 +48,7 @@ function ksvd_loop!(
     D,
     X;
     timer=TimerOutput(),
+    yidx=axes(Y, 2),
     verbose=false
 )
     E = copy(Y)
@@ -61,7 +63,7 @@ function ksvd_loop!(
         D′ = @view D[:, midx]
         X′ = copy(X[midx, :])
         verbose && @info "Running ksvd update for $(midx)"
-        ksvd_update(ksvd_update_method, E, D′, X′; timer)
+        ksvd_update(ksvd_update_method, maybeview(E, :, yidx), D′, X′[:, yidx]; timer)
         verbose && @info "Running sparse coding"
         X′ = sparse_coding(sparse_coding_method′, E, D′; timer)
         E .-= D′ * X′

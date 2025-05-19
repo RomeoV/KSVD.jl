@@ -29,6 +29,15 @@ function init_dictionary(rng::AbstractRNG, T::Type, n::Int, K::Int)
     return D
 end
 
+"""
+    maybeview(mat::AbstractMatrix, ::Colon, idx::UnitRange)
+    maybeview(mat::AbstractMatrix, ::Colon, idx)
+
+Helper function to construct a matrix view if we have a continuous slice, and copy otherwise.
+"""
+maybeview(mat::AbstractMatrix, ::Colon, idx::UnitRange) = view(mat, :, idx)
+maybeview(mat::AbstractMatrix, ::Colon, idx) = getindex(mat, :, idx)
+
 """ Redefine findmax for vector of floats to not do nan-checks.
 
 By default,`findmax` uses `isless`, which does a nan-check before computing `<(lhs, rhs)`.
