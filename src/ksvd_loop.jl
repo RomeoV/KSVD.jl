@@ -56,7 +56,7 @@ function ksvd_loop!(
 
     Msets = constructM(size(D, 2); log2min=ksvd_loop_method.log2min)
     nnzbudget = sparse_coding_method.max_nnz
-    localnnzbudget = round(Int, nnzbudget / length(Msets))
+    localnnzbudget = ceil(Int, nnzbudget / length(Msets))
     sparse_coding_method′ = @set sparse_coding_method.max_nnz = localnnzbudget
 
     for midx in Msets
