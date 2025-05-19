@@ -12,7 +12,8 @@ module KSVD
 
 export ksvd, ksvd_update, sparse_coding
 export LegacyKSVD, OptimizedKSVD, ParallelKSVD, BatchedParallelKSVD
-export LegacyMatchingPursuit, ParallelMatchingPursuit
+export LegacyMatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit
+export NormalLoop, MatryoshkaLoop
 
 using Base.Threads, Random, SparseArrays, LinearAlgebra
 import LinearAlgebra: normalize!
