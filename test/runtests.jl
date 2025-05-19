@@ -4,6 +4,7 @@ using LinearAlgebra
 using Test
 using SparseArrays
 import SparseArrays.nzvalview
+import OhMyThreads
 using Random
 
 @testset "Test ksvd algo" begin
@@ -17,6 +18,39 @@ end
     data = rand(100, 500)
     ksvd(data, 200)
     @test true
+end
+
+@testset "Test feature grid" begin
+    T = Float32
+    ksvd_update_methods = [
+        LegacyKSVD(),
+        BatchedParallelKSVD{true,T}(),
+        BatchedParallelKSVD{false,T}(),
+        BatchedParallelKSVD{false,Float32,OhMyThreads.Schedulers.DynamicScheduler,KSVD.TSVDSolver{T}}(),
+    ]
+    minibatch_sizes = [
+        nothing, 100
+    ]
+    ksvd_loop_types = [
+        NormalLoop(),
+        MatryoshkaLoop(; log2min=1)
+    ]
+    sparse_coding_methods = [
+        LegacyMatchingPursuit(; max_nnz=3),
+        ParallelMatchingPursuit(; max_nnz=3),
+        OrthogonalMatchingPursuit(; max_nnz=3),
+    ]
+
+    data = rand(Float32, 32, 256)
+    @testset for ksvd_update_method in ksvd_update_methods, minibatch_size in minibatch_sizes,
+        ksvd_loop_type in ksvd_loop_types, sparse_coding_method in sparse_coding_methods
+
+        ksvd(data, 64;
+            sparse_coding_method, ksvd_update_method,
+            ksvd_loop_type, minibatch_size,
+            maxiters=5)
+        @test true
+    end
 end
 
 @testset "Test utils" begin
