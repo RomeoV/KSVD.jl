@@ -87,8 +87,7 @@ end
 reorient!(vec::AbstractVector) = vec .*= sign(first(vec))
 reorient(vec::AbstractVector) = vec .* sign(first(vec))
 
-function
-Base._typed_hcat(::Type{T}, A::Base.AbstractVecOrTuple{SparseVector{T,Idx_t}}) where {T,Idx_t}
+function Base._typed_hcat(::Type{T}, A::Base.AbstractVecOrTuple{SparseVector{T,Idx_t}}) where {T,Idx_t}
     K = length(first(A))
     N = length(A)
     X = let
