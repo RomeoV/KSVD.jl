@@ -19,6 +19,18 @@ end
 ParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
     ParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,TSVDSolver{T}}(; kwargs...)
 
+function Base.show(io::IO, m::ParallelKSVD)
+    out = IOBuffer()
+    print(out, typeof(m))
+    print(out, "(")
+    print(out, typeof(m.E_buf), " size $(size(m.E_buf)), ")
+    print(out, typeof(m.E_Ω_bufs), " length $(length(m.E_Ω_bufs)), ")
+    print(out, typeof(m.D_cpy_buf), " size $(size(m.D_cpy_buf)), ")
+    print(out, m.shuffle_indices, ", ")
+    print(out, m.svd_solver, ")")
+    print(io, String(take!(out)))
+end
+
 @kwdef mutable struct BatchedParallelKSVD{precompute_error,T,Scheduler<:OhMyThreads.Scheduler,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     E_buf::Matrix{T} = T[;;]
     E_Ω_bufs::Vector{Matrix{T}} = Matrix{T}[]
@@ -30,6 +42,19 @@ end
 # Backward compatibility constructor
 BatchedParallelKSVD{precompute_error,T}(; kwargs...) where {precompute_error,T} =
     BatchedParallelKSVD{precompute_error,T,OhMyThreads.Schedulers.DynamicScheduler,ArnoldiSVDSolver{T}}(; kwargs...)
+
+function Base.show(io::IO, m::BatchedParallelKSVD)
+    out = IOBuffer()
+    print(out, typeof(m))
+    print(out, "(")
+    print(out, typeof(m.E_buf), " size $(size(m.E_buf)), ")
+    print(out, typeof(m.E_Ω_bufs), " length $(length(m.E_Ω_bufs)), ")
+    print(out, typeof(m.D_cpy_buf), " size $(size(m.D_cpy_buf)), ")
+    print(out, m.shuffle_indices, ", ")
+    print(out, m.batch_size_per_thread, ", ")
+    print(out, m.svd_solver, ")")
+    print(io, String(take!(out)))
+end
 
 @kwdef mutable struct DistributedKSVD{T,SVDSol<:AbstractTruncatedSVD} <: KSVDMethod
     submethod_per_worker::Dict{Int,<:KSVDMethod} = Dict()
