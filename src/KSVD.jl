@@ -128,7 +128,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY) : copy(X_init))
 
     # progressbar = Progress(maxiter)
-    maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, n_samples)
+    maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, (isnothing(minibatch_size) ? n_samples : minibatch_size))
 
     norm_results, nnz_per_col_results = Float64[], Float64[]
     # if store_trace || show_trace
