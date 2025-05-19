@@ -30,6 +30,25 @@ function init_dictionary(rng::AbstractRNG, T::Type, n::Int, K::Int)
 end
 
 """
+    init_sparse_assignment(m::Int, n::Int, k::Int)
+    init_sparse_assignment(::Type{T}, m::Int, n::Int, k::Int) where {T}
+    init_sparse_assignment(fn::Function, m::Int, n::Int, k::Int)
+
+Initialize a random matrix `X` in `m x n` with `k` nonzeros per column.
+By default, each nonzero element is sampled from a uniform distribution with eltype `Float64`.
+The eltype `T` or the initialization function with interface like `k -> rand(Float32, k).+1` can optionally be provided.
+"""
+init_sparse_assignment_mat(m::Int, n::Int, k::Int) = init_sparse_assignment_mat(Float64, m, n, k)
+init_sparse_assignment_mat(::Type{T}, m::Int, n::Int, k::Int) where {T} = init_sparse_assignment_mat(k -> init_sparse_assignment_fn(T, k), m, n, k)
+function init_sparse_assignment_mat(fn::Function, m::Int, n::Int, k::Int)
+    X = reduce(hcat,
+        (SparseVector(m, sort(sample(1:m, k; replace=false)), fn(k))
+         for _ in 1:n)) |> SparseMatrixCSC
+    return X
+end
+init_sparse_assignment_fn(T, k) = rand(T, k) .+ 1
+
+"""
     maybeview(mat::AbstractMatrix, ::Colon, idx::UnitRange)
     maybeview(mat::AbstractMatrix, ::Colon, idx)
 
