@@ -1,8 +1,10 @@
 import DataStructures: DefaultDict
-import SparseArrays: sparsevec
+import SparseArrays: sparsevec, SparseMatrixCSC
 import Random: AbstractRNG, default_rng
 import Distributions: Binomial, quantile
 import Base._typed_hcat
+import Base.getindex
+import LinearAlgebra.Adjoint
 import StatsBase: sample
 import Hungarian: hungarian
 
@@ -15,6 +17,11 @@ const czip = collect ∘ zip
 
 function SparseArrays.sparsevec(d::DefaultDict{Int,T}, m::Int) where {T}
     SparseArrays.sparsevec(collect(keys(d)), collect(values(d)), m)
+end
+
+# See https://github.com/JuliaSparse/SparseArrays.jl/issues/628#issuecomment-2892498268
+function Base.getindex(M::LinearAlgebra.Adjoint{T,<:SparseMatrixCSC{T}}, i::Int, ::Colon) where {T}
+    getindex(M.parent, :, i)
 end
 
 init_dictionary(n::Int, K::Int) = init_dictionary(Float64, n, K)
