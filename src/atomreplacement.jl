@@ -13,7 +13,7 @@ columns of E for which the corresponding column of X is non-zero.
 """
 function fasterror!(E, Y, D, X; timer::TimerOutput=TimerOutput())
     @timeit_debug timer "compute fast error" begin
-        E .= copy(Y)
+        E .= Y
         fastdensesparsemul_threaded!(E, D, X, -1, 1)
         return E
     end
