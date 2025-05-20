@@ -67,10 +67,11 @@ function permute_D_X!(D, X, Dref::AbstractMatrix)
     eachcol(D) .*= λs
     X .*= reshape(λs, :, 1)
 
-    (; assignment, cost)  # s.t. D_rhs[:, assignment] ≈ D_lhs, and X_rhs[assignment, :] ≈ X_lhs
+    (; assignment, cost)
 end
 
 function permute_D_X!(D, X, Xref::AbstractSparseMatrix)
+    @warn "Permuting using `X` instead of `D` doesn't work very robustly." maxlog=1
     distances = 1 .- abs.(Matrix(X * Xref'))
     assignment, cost = hungarian(distances)
     D .= D[:, sortperm(assignment)]
@@ -82,7 +83,7 @@ function permute_D_X!(D, X, Xref::AbstractSparseMatrix)
     eachcol(D) .*= λs
     X .*= reshape(λs, :, 1)
 
-    (; assignment, cost)  # s.t. D_rhs[:, assignment] ≈ D_lhs, and X_rhs[assignment, :] ≈ X_lhs
+    (; assignment, cost)
 end
 
 
