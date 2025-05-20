@@ -77,10 +77,10 @@ function validate_mp_args(max_nnz, max_iter, rtol, other_args...)
 end
 
 function sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix, max_nnz=max(size(dictionary, 2) ÷ 10, 1);
-    timer=TimerOutput(), sparse_coding_kwargs...)
+    timer=TimerOutput(), DtD=nothing, sparse_coding_kwargs...)
 
     sparse_coding_method = ParallelMatchingPursuit(; max_nnz, sparse_coding_kwargs...)
-    sparse_coding(sparse_coding_method, data, dictionary; timer)
+    sparse_coding(sparse_coding_method, data, dictionary; DtD, timer)
 end
 
 get_method_map_fn(::MatchingPursuit) = map
