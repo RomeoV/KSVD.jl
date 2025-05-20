@@ -3,6 +3,8 @@ import SparseArrays: sparsevec
 import Random: AbstractRNG, default_rng
 import Distributions: Binomial, quantile
 import Base._typed_hcat
+import StatsBase: sample
+import Hungarian: hungarian
 
 "Helper for `@threads for (i, idx) in enumerate(indices)` use case."
 const cenumerate = collect ∘ enumerate
@@ -47,6 +49,34 @@ function init_sparse_assignment_mat(fn::Function, m::Int, n::Int, k::Int)
     return X
 end
 init_sparse_assignment_fn(T, k) = rand(T, k) .+ 1
+
+function permute_D_X!(D, X, Dref::AbstractMatrix)
+    distances = 1 .- abs.(D' * Dref)
+    assignment, cost = hungarian(distances)
+    D .= D[:, sortperm(assignment)]
+    X .= X[sortperm(assignment), :]
+
+    λs = sign.(dot.(eachcol(D), eachcol(Dref)))
+    eachcol(D) .*= λs
+    X .*= reshape(λs, :, 1)
+
+    (; assignment, cost)  # s.t. D_rhs[:, assignment] ≈ D_lhs, and X_rhs[assignment, :] ≈ X_lhs
+end
+
+function permute_D_X!(D, X, Xref::AbstractSparseMatrix)
+    distances = 1 .- abs.(X * Xref')
+    assignment, cost = hungarian(distances)
+    D .= D[:, sortperm(assignment)]
+    X .= X[sortperm(assignment), :]
+
+    λs = sign.([dot(X[i, :], Xref[i, :]) for i in axes(X, 1)])
+    eachcol(D) .*= λs
+    X .*= reshape(λs, :, 1)
+
+    (; assignment, cost)  # s.t. D_rhs[:, assignment] ≈ D_lhs, and X_rhs[assignment, :] ≈ X_lhs
+end
+
+
 
 """
     maybeview(mat::AbstractMatrix, ::Colon, idx::UnitRange)
