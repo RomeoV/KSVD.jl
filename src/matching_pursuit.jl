@@ -27,7 +27,7 @@ may use too much memory, e.g. if the data is too large to fit into memory (see `
     max_iter::Int = 4 * max_nnz
     rtol = default_rtol
     precompute_products = true
-    refit_coefficients = false
+    refit_coeffs = false
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
@@ -51,7 +51,7 @@ For description of parameters see `MatchingPursuit`.
     max_iter::Int = 4 * max_nnz
     rtol = default_rtol
     precompute_products = true
-    refit_coefficients = true
+    refit_coeffs = true
     ParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
@@ -260,13 +260,13 @@ end
         # @assert(isfinite(norm_data))
         if norm(residual) == 0 || norm(residual) / norm_data < rtol
             x = sparsevec(xdict, n_atoms)
-            method.refit_coefficients && refitcoefficients!(x, data, dictionary)
+            method.refit_coeffs && refitcoefficients!(x, data, dictionary)
             return x
         end
         if length(xdict) > max_nnz
             pop!(xdict, findmin(abs, xdict)[2])
             x = sparsevec(xdict, n_atoms)
-            method.refit_coefficients && refitcoefficients!(x, data, dictionary)
+            method.refit_coeffs && refitcoefficients!(x, data, dictionary)
             return x
         end
 
@@ -284,7 +284,7 @@ end
         xdict[maxindex] += a
     end
     x = sparsevec(xdict, n_atoms)
-    method.refit_coefficients && refitcoefficients!(x, data, dictionary)
+    method.refit_coeffs && refitcoefficients!(x, data, dictionary)
     return x
 end
 
