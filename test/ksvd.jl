@@ -3,6 +3,7 @@ import SparseArrays: sprand
 import Random: TaskLocalRNG, seed!
 import StatsBase: std
 import OhMyThreads
+using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
 
 function allapproxequal(xs; kwargs...)
     isempty(xs) && return true
@@ -89,12 +90,12 @@ end
     end
 
     @testset "Compare SVD implementations" begin
-        using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
         d, m = 2 * 64, 2 * 256
         n = nsamples = 10_000
         nnzpercol = 5
         T = Float32
 
+        seed!(2)
         D = KSVD.init_dictionary(Float32, d, m)
         X = KSVD.init_sparse_assignment_mat(Float32, m, nsamples, nnzpercol)
         Y = D * X
@@ -141,10 +142,13 @@ end
         D_init = KSVD.init_dictionary(Float32, d, m)
         Random.seed!(42)
         (D_tsvd, X_tsvd) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_tsvd, maxiters=10, D_init=copy(D_init))
+        permute_D_X!(D_tsvd, X_tsvd, D)
         Random.seed!(42)
         (D_kryl, X_kryl) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_kryl, maxiters=10, D_init=copy(D_init))
+        permute_D_X!(D_kryl, X_kryl, D)
         Random.seed!(42)
         (D_arno, X_arno) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arno, maxiters=10, D_init=copy(D_init))
+        permute_D_X!(D_arno, X_arno, D)
         # (D_arpa, X_arpa) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arpa, maxiters=10, D_init)
         @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl)) ./ norm.(eachcol(Y))) atol = 0.005
         @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arno * X_arno)) ./ norm.(eachcol(Y))) atol = 0.005

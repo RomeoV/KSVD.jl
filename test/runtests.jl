@@ -38,7 +38,7 @@ end
     sparse_coding_methods = [
         LegacyMatchingPursuit(; max_nnz=3),
         ParallelMatchingPursuit(; max_nnz=3),
-        ParallelMatchingPursuit(; max_nnz=3, refit_coefficients=true),
+        ParallelMatchingPursuit(; max_nnz=3, refit_coeffs=true),
         OrthogonalMatchingPursuit(; max_nnz=3),
     ]
 
