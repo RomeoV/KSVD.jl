@@ -91,7 +91,7 @@ end
     @testset "Compare SVD implementations" begin
         using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
         d, m = 2 * 64, 2 * 256
-        nsamples = 10_000
+        n = nsamples = 10_000
         nnzpercol = 5
         T = Float32
 
@@ -138,7 +138,7 @@ end
         ksvd_update_method_arno = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArnoldiSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
         # Arpack crashes when called from multiple threads at once!
         # ksvd_update_method_arpa = BatchedParallelKSVD{false,T,OhMyThreads.DynamicScheduler,KSVD.ArpackSVDSolver{T}}(; shuffle_indices=false, batch_size_per_thread=1)
-        D_init = KSVD.init_dictionary(Float32, m, n)
+        D_init = KSVD.init_dictionary(Float32, d, m)
         Random.seed!(42)
         (D_tsvd, X_tsvd) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_tsvd, maxiters=10, D_init=copy(D_init))
         Random.seed!(42)
