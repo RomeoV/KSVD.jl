@@ -27,6 +27,7 @@ may use too much memory, e.g. if the data is too large to fit into memory (see `
     max_iter::Int = 4 * max_nnz
     rtol = default_rtol
     precompute_products = true
+    refit_coefficients = false
     MatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
@@ -50,6 +51,7 @@ For description of parameters see `MatchingPursuit`.
     max_iter::Int = 4 * max_nnz
     rtol = default_rtol
     precompute_products = true
+    refit_coefficients = true
     ParallelMatchingPursuit(args...) = (validate_mp_args(args...); new(args...))
 end
 
@@ -236,6 +238,12 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 ```
 """
 
+function refitcoefficients!(x::SparseVector, y, D)
+    local_basis = @view D[:, nonzeroinds(x)]
+    x.nzval .= (local_basis \ y)
+    return x
+end
+
 @inbounds function matching_pursuit_(
     method::Union{MatchingPursuit,ParallelMatchingPursuit,GPUAcceleratedMatchingPursuit},
     data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
@@ -254,11 +262,15 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
         # @assert(norm(residual)) && @show norm(residual), residual
         # @assert(isfinite(norm_data))
         if norm(residual) == 0 || norm(residual) / norm_data < rtol
-            return sparsevec(xdict, n_atoms)
+            x = sparsevec(xdict, n_atoms)
+            method.refit_coefficients && refitcoefficients!(x, data, dictionary)
+            return x
         end
         if length(xdict) > max_nnz
             pop!(xdict, findmin(abs, xdict)[2])
-            return sparsevec(xdict, n_atoms)
+            x = sparsevec(xdict, n_atoms)
+            method.refit_coefficients && refitcoefficients!(x, data, dictionary)
+            return x
         end
 
         # find an atom with maximum inner product
@@ -274,7 +286,9 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 
         xdict[maxindex] += a
     end
-    return sparsevec(xdict, n_atoms)
+    x = sparsevec(xdict, n_atoms)
+    method.refit_coefficients && refitcoefficients!(x, data, dictionary)
+    return x
 end
 
 """ This is the original implementation by https://github.com/IshitaTakeshi, useful for
