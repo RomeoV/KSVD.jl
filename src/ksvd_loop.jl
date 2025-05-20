@@ -40,6 +40,31 @@ function ksvd_loop!(
     X = sparse_coding(sparse_coding_method, Y, D; timer)
 end
 
+"""
+    ksvd_loop!(
+    ksvd_loop_method::MatryoshkaLoop,
+    ksvd_update_method,
+    sparse_coding_method,
+    Y,
+    D,
+    X;
+    timer=TimerOutput(),
+    yidx=axes(Y, 2),
+    verbose=false
+)
+
+This is the "heart" of KSVD, together with the Matryoshka modification.
+We assume that we already have computed `X`.
+Then, the dictionaries are "grouped" into disjoint groups of exponentially growing size.
+E.g., by default the first and second group have 64 elements, the third 128, the fourth 256 and so forth.
+Each group gets an equal share of the `nnz` budget, although the value is rounded up (`ceil`),
+so in practice the true nnz may be slightly larger than `max_nnz`.
+
+Then for each group we first update (in-place) D, and the compute a new `X` (out-of-place).
+Then, we compute the error matrix just using the current slices of `D` and `X`, and continue to the next group, but focussing only on the error matrix.
+
+`yidx` may be provided in a similar way to the `NormalLoop` implementation.
+"""
 function ksvd_loop!(
     ksvd_loop_method::MatryoshkaLoop,
     ksvd_update_method,
