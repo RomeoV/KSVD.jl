@@ -49,6 +49,47 @@ end
     end
 end
 
+@testset "permute_D_X! test" begin
+    rng = TaskLocalRNG()
+    seed!(rng, 1)
+    d = 1000  # sample dimension
+    n = 10_000  # num samples
+    m = 1200  # dictionary dimension >= sample_dimension
+    D = KSVD.init_dictionary(rng, T, d, m)
+
+    @testset "D as reference" begin
+        X = KSVD.init_sparse_assignment_mat(T, m, n, k)
+        for k in 3:10  # Note that this doesn't pass for larger nnz...
+            idxshuf = randperm(size(D, 2))
+            Dperm = D[:, idxshuf]
+            Xperm = X[idxshuf, :]
+            λs = rand((-1, 1), size(Dperm, 2))
+            eachcol(Dperm) .*= λs
+            Xperm .*= reshape(λs, :, 1)
+
+            permute_D_X!(Dperm, Xperm, D)
+            @test Dperm ≈ D
+            @test Xperm ≈ X
+        end
+    end
+
+    @testset "X as reference" begin
+        X = KSVD.init_sparse_assignment_mat(T, m, n, k)
+        for k in 3:10  # Note that this doesn't pass for larger nnz...
+            idxshuf = randperm(size(D, 2))
+            Dperm = D[:, idxshuf]
+            Xperm = X[idxshuf, :]
+            λs = rand((-1, 1), size(Dperm, 2))
+            eachcol(Dperm) .*= λs
+            Xperm .*= reshape(λs, :, 1)
+
+            permute_D_X!(Dperm, Xperm, X)
+            @test Dperm ≈ D
+            @test Xperm ≈ X
+        end
+    end
+end
+
 @testset "Compare to Legacy Implementation." begin
     @testset for T in [Float64, Float32]
         rng = TaskLocalRNG()
