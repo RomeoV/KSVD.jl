@@ -17,11 +17,16 @@ end
     D,
     X;
     timer=TimerOutput(),
+    yidx=axes(Y, 2),
     verbose=false
 )
 
-`D` will be overwritten in this loop.
-`Y` may be a (potentially shuffled) subset of `Y`.
+This is the "heart" of KSVD, in its regular form.
+We assume that we already have computed `X`. Then we first update (in-place) D, and the compute a new `X` (out-of-place).
+
+`yidx` may be provided as a subset of the columns of `Y`.
+In that case, the dictionary update will only be computed on those columns of `Y`.
+However, the full `X` will always be computed.
 """
 function ksvd_loop!(
     ksvd_loop_type::NormalLoop,
