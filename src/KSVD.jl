@@ -11,8 +11,9 @@ module KSVD
 #
 
 export ksvd, ksvd_update, sparse_coding
+export permute_D_X!
 export LegacyKSVD, OptimizedKSVD, ParallelKSVD, BatchedParallelKSVD
-export LegacyMatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit
+export LegacyMatchingPursuit, MatchingPursuit, ParallelMatchingPursuit, OrthogonalMatchingPursuit
 export NormalLoop, MatryoshkaLoop
 
 using Base.Threads, Random, SparseArrays, LinearAlgebra
