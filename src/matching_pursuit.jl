@@ -97,9 +97,6 @@ function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,Ort
     data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput(), DtD=nothing, DtY=nothing) where {T}
     @timeit_debug timer "Sparse coding" begin
 
-        K = size(dictionary, 2)
-        N = size(data, 2)
-
         map_fn = get_method_map_fn(method)
 
         @timeit_debug timer "Precompute DtD" begin
