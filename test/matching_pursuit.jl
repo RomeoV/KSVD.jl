@@ -70,6 +70,7 @@ end
     d = 1000  # sample dimension
     n = 10_000  # num samples
     m = 1200  # dictionary dimension >= sample_dimension
+    T = Float32
     D = KSVD.init_dictionary(rng, T, d, m)
 
     @testset "D as reference" begin
