@@ -71,12 +71,14 @@ function permute_D_X!(D, X, Dref::AbstractMatrix)
 end
 
 function permute_D_X!(D, X, Xref::AbstractSparseMatrix)
-    distances = 1 .- abs.(X * Xref')
+    distances = 1 .- abs.(Matrix(X * Xref'))
     assignment, cost = hungarian(distances)
     D .= D[:, sortperm(assignment)]
     X .= X[sortperm(assignment), :]
+    X_qr = copy(transpose(X))'  # qr = quick row lookup
+    Xref_qr = copy(transpose(X))'
 
-    λs = sign.([dot(X[i, :], Xref[i, :]) for i in axes(X, 1)])
+    λs = sign.([dot(X_qr[i, :], Xref_qr[i, :]) for i in axes(X, 1)])
     eachcol(D) .*= λs
     X .*= reshape(λs, :, 1)
 
