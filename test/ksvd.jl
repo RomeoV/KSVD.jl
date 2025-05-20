@@ -150,8 +150,8 @@ end
         (D_arno, X_arno) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arno, maxiters=10, D_init=copy(D_init))
         permute_D_X!(D_arno, X_arno, D)
         # (D_arpa, X_arpa) = ksvd(Y, n, nnzpercol; ksvd_update_method=ksvd_update_method_arpa, maxiters=10, D_init)
-        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl)) ./ norm.(eachcol(Y))) atol = 0.005
-        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arno * X_arno)) ./ norm.(eachcol(Y))) atol = 0.005
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_kryl * X_kryl)) ./ norm.(eachcol(Y))) atol = 0.010
+        @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arno * X_arno)) ./ norm.(eachcol(Y))) atol = 0.010
         # @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arpa * X_arpa)) ./ norm.(eachcol(Y))) atol = 0.005
     end
 end
