@@ -123,9 +123,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         D = (isnothing(D_init) ? init_dictionary(T, emb_dim, n_atoms) : copy(D_init))  # size(D) == (n, K)
         @assert all(≈(1.0), norm.(eachcol(D)))
     end
-    DtD = D' * D
-    DtY = D' * Y
-    X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer, DtD, DtY) : copy(X_init))
+    X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer) : copy(X_init))
 
     # progressbar = Progress(maxiter)
     maybe_init_buffers!(ksvd_update_method, emb_dim, n_atoms, (isnothing(minibatch_size) ? n_samples : minibatch_size))
