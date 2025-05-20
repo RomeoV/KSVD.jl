@@ -51,8 +51,8 @@ init_sparse_assignment_mat(m::Int, n::Int, k::Int) = init_sparse_assignment_mat(
 init_sparse_assignment_mat(::Type{T}, m::Int, n::Int, k::Int) where {T} = init_sparse_assignment_mat(k -> init_sparse_assignment_fn(T, k), m, n, k)
 function init_sparse_assignment_mat(fn::Function, m::Int, n::Int, k::Int)
     X = reduce(hcat,
-        (SparseVector(m, sort(sample(1:m, k; replace=false)), fn(k))
-         for _ in 1:n)) |> SparseMatrixCSC
+        [SparseVector(m, sort(sample(1:m, k; replace=false)), fn(k))
+         for _ in 1:n]) |> SparseMatrixCSC
     return X
 end
 init_sparse_assignment_fn(T, k) = rand(T, k) .+ 1
