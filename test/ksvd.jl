@@ -20,11 +20,12 @@ end
         rng = TaskLocalRNG()
         seed!(rng, 1)
 
-        E, N = 100, 1000
-        data = rand(rng, T, E, N)
-        D = KSVD.init_dictionary(rng, T, E, 2 * E)
+        d, n = 100, 1000
+        m = 2 * d
+        data = rand(rng, T, d, n)
+        D = KSVD.init_dictionary(rng, T, d, m)
         nnz_per_col = 10
-        X = sprand(rng, T, 2 * E, N, nnz_per_col * N / (2 * E * N))
+        X = KSVD.init_sparse_assignment_mat(T, m, n, nnz_per_col)
 
         D_baseline, X_baseline = ksvd_update(KSVD.LegacyKSVD(), data, copy(D), copy(X))
         @test all(≈(1.0), norm.(eachcol(D_baseline)))
@@ -43,7 +44,7 @@ end
             KSVD.BatchedParallelKSVD{true,T}(shuffle_indices=false, batch_size_per_thread=1),
             KSVD.BatchedParallelKSVD{false,T}(shuffle_indices=false, batch_size_per_thread=1),
         ]
-            KSVD.maybe_init_buffers!(method, E, 2 * E, N)
+            KSVD.maybe_init_buffers!(method, d, m, n)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
             @test D_res ≈ D_baseline rtol = sqrt(method.svd_solver.tol)
@@ -60,7 +61,7 @@ end
             KSVD.BatchedParallelKSVD{true,T}(shuffle_indices=true, batch_size_per_thread=1),
             KSVD.BatchedParallelKSVD{false,T}(shuffle_indices=true, batch_size_per_thread=1),
         ]
-            KSVD.maybe_init_buffers!(method, E, 2 * E, N)
+            KSVD.maybe_init_buffers!(method, d, m, n)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
             @test D_res ≈ D_baseline rtol = sqrt(eps(T)) skip = true
@@ -76,7 +77,7 @@ end
             KSVD.ParallelKSVD{false,T}(shuffle_indices=false),
             KSVD.ParallelKSVD{true,T}(shuffle_indices=false),
         ]
-            KSVD.maybe_init_buffers!(method, E, 2 * E, N)
+            KSVD.maybe_init_buffers!(method, d, m, n)
             D_res, X_res = ksvd_update(method, data, copy(D), copy(X))
 
             @test D_res ≈ D_baseline rtol = sqrt(eps(T)) skip = true
@@ -89,17 +90,21 @@ end
 
     @testset "Compare SVD implementations" begin
         using KSVD, Random, StatsBase, SparseArrays, LinearAlgebra
-        m, n = 2 * 64, 2 * 256
+        d, m = 2 * 64, 2 * 256
         nsamples = 10_000
         nnzpercol = 5
         T = Float32
 
-        D = KSVD.init_dictionary(Float32, m, n)
-        X = stack(
-            (SparseVector(n, sort(sample(1:n, nnzpercol; replace=false)), rand(T, nnzpercol))
-             for _ in 1:nsamples);
-            dims=2)
-        Y = D * X + T(0.05) * randn(T, size(D * X))
+        D = KSVD.init_dictionary(Float32, d, m)
+        X = KSVD.init_sparse_assignment_mat(Float32, m, nsamples, nnzpercol)
+        Y = D * X
+        ycolmean = mean(norm.(eachcol(Y)))
+        # we want the noise to be about some percentage ϵ of the signal.
+        # we can recall that `norm(σ*randn(d)) ≈ σ*sqrt(d)`.
+        # shockingly, we can recover the true x adjacency indices for noise as large as the signal!
+        ϵ = 0.1
+        σ = ϵ * ycolmean / sqrt(d)
+        Y .+= σ * randn!(similar(Y))
 
         idx = findall(!iszero, X[1, :])
         Y_ = Y[:, idx]
@@ -146,62 +151,3 @@ end
         # @test mean(norm.(eachcol(Y - D_tsvd * X_tsvd)) ./ norm.(eachcol(Y))) ≈ mean(norm.(eachcol(Y - D_arpa * X_arpa)) ./ norm.(eachcol(Y))) atol = 0.005
     end
 end
-
-## # basic one
-## Y = [
-##      0  3;
-##      1  0;
-##      1 -3;
-##     -2  3;
-##      0  0;
-## ]
-##
-## D, X = ksvd(Y, 8, max_iter_mp = 600, sparsity_allowance = 1.0)
-## @test norm(Y-D*X) < 1e-4
-##
-## # sparsity_allowance must be > 0
-## @test_throws ArgumentError ksvd(Y, 20, sparsity_allowance = -0.1)
-## @test_throws ArgumentError ksvd(Y, 20, sparsity_allowance = 1.1)
-##
-## # should work normally
-## ksvd(Y, 20, max_iter = 1)
-## ksvd(Y, 20, sparsity_allowance = 0.0)
-## ksvd(Y, 20, sparsity_allowance = 1.0)
-##
-## # But should work well when size(Y, 1) == n_atoms
-## Y = [
-##     -1 1 2;
-##      1 0 1
-## ]
-## D, X = ksvd(Y, 2, max_iter_mp = 4000)
-## @test norm(Y-D*X) < 0.001  # relax the constraint since the dictionary is small
-##
-## # Return only if X is sparse enough
-## Y = [
-## 	0  2  3 -1  1;
-## 	1 -3  1  3  0
-## ]
-##
-## # More than 20% of elements in X must be zeros
-## sparsity_allowance = 0.2
-## D, X = ksvd(Y, 5, max_iter = Int(1e10), sparsity_allowance = sparsity_allowance)
-## @test sum(iszero, X) / length(X) > sparsity_allowance
-##
-##
-## # compare error_maxtrix and error_matrix2
-## Y, D, X = rand(30, 30), rand(30, 20), rand(20, 30);
-## KSVD.error_matrix(Y, D, X, 10) ≈ KSVD.error_matrix2(Y, D, X, 10)
-##
-## # compare with tullio approach
-## Eₖ = Y - D * X
-## for k in 1:size(X,1)
-##     # let Xₖ = (@view X[k, :]), Dₖ = (@view D[:, k])
-##     @tullio Eₖ[i, j] += D[i, $k] * X[$k, j]
-##     # end
-##     @test Eₖ ≈ KSVD.error_matrix2(Y, D, X, k)
-##     D[:, k] = rand(size(D, 1))
-##     X[k, :] = rand(size(X, 2))
-##     # let Xₖ = (@view X[k, :]), Dₖ = (@view D[:, k])
-##     @tullio Eₖ[i, j] += -D[i, $k] * X[$k, j]
-##     # end
-## end
