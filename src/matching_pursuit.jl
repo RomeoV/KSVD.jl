@@ -74,8 +74,12 @@ function validate_mp_args(max_nnz, max_iter, rtol, other_args...)
     0.0 <= rtol <= 1.0 || throw(ArgumentError("`rtol` must be in [0,1]"))
 end
 
-sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix, max_nnz=max(size(dictionary, 2) ÷ 10, 1);
-    timer=TimerOutput()) = sparse_coding(ParallelMatchingPursuit(; max_nnz), data, dictionary; timer)
+function sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix, max_nnz=max(size(dictionary, 2) ÷ 10, 1);
+    timer=TimerOutput(), sparse_coding_kwargs...)
+
+    sparse_coding_method = ParallelMatchingPursuit(; max_nnz, sparse_coding_kwargs...)
+    sparse_coding(sparse_coding_method, data, dictionary; timer)
+end
 
 get_method_map_fn(::MatchingPursuit) = map
 get_method_map_fn(::ParallelMatchingPursuit) = tmap
