@@ -129,7 +129,11 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
             if size(E_Ω, 2) <= 3
                 U, S, V = svd!(E_Ω)
             else
-                U, S, V = compute_truncated_svd(method.svd_solver, E_Ω, 1)
+                U, S, V = try
+                    compute_truncated_svd(method.svd_solver, E_Ω, 1)
+                catch e  # very rarely Arnoldi doesn't converge, but TSVD does. this prevents extremely annoying errors many iterations in.
+                    (e == "QR algorithm did not converge" ? compute_truncated_svd(TSVDSolver{T}(), E_Ω, 1) : rethrow())
+                end
             end
             # Notice we fix the sign of U[1,1] to be positive to make the svd unique and avoid oszillations.
             # We also re-normalize here. Even though the result should be normalized, we can have some numerical inaccuracies.
