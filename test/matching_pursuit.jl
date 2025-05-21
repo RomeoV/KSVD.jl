@@ -21,7 +21,7 @@ end
         ParallelMatchingPursuit(; refit_coeffs=true),
         OrthogonalMatchingPursuit(;),
     ]
-    test_cuda_ext && append!(sparse_coding_methods, CUDAAccelMatchingPursuit())
+    test_cuda_ext && append!(sparse_coding_methods, CUDAAccelleratedMatchingPursuit())
     rng = TaskLocalRNG()
     seed!(rng, 1)
     d = 1000  # sample dimension

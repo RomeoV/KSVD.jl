@@ -176,7 +176,7 @@ function matching_pursuit_(
     # will mask out "used indices" when finding next basis vector
     # mask = ones(Bool, size(products))
     mask = BitArray(undef, size(products))
-    mask .= 1;
+    mask .= 1
 
     for i in 1:max_nnz
         if norm(residual) / norm_data < rtol
