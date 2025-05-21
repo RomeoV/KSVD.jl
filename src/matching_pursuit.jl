@@ -66,6 +66,8 @@ abstract type GPUAcceleratedMatchingPursuit <: SparseCodingMethod end;
     max_iter::Int = 4 * max_nnz
     rtol = KSVD.default_rtol
     precompute_products = true
+    refit_coeffs = true
+    batchsize = 2^12
     CUDAAcceleratedMatchingPursuit(args...) = (KSVD.validate_mp_args(args...); new(args...))
 end
 
