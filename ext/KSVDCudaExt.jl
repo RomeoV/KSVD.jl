@@ -83,11 +83,8 @@ end
 function KSVD.compute_truncated_svd(solver::KSVD.CUDAAcceleratedArnoldiSVDSolver{T}, A::AbstractMatrix{T}, k::Int) where {T<:Number}
     m, n = size(A)
     (U, S, V) = if m > n  # Tall matrix, decompose A^T * A
-        AtA = let Adev = cu(Matrix(A))
-            AtA = Symmetric(Matrix(Adev' * Adev))
-            CUDA.unsafe_free!(Adev)
-            AtA
-        end
+        # we assume that here we would not get any benefit from transferring to the GPU.
+        AtA = Symmetric(Matrix(Adev' * Adev))
         (; Q, R, eigenvalues), _ = partialschur(AtA; nev=k, tol=solver.tol)
         V = Q
         Sigma = sqrt.(real.(eigenvalues))
