@@ -18,6 +18,16 @@ This includes:
 - Extensive benchmark-driven optimizations utilizing [`ProfileView.jl`](https://github.com/timholy/ProfileView.jl)
 - Many other modification experiments.
 
+## Installation
+
+To use KSVD.jl with multiple threads for better performance, launch Julia with:
+
+```bash
+julia --project=. --threads=auto
+```
+
+For the first startup, Julia will need to precompile packages which may take a moment.
+
 # Usage
 
 Assume that each column of Y represents a feature vector, and each column of D a dictionary vector, with n dictionaries (`size(D, 2) == n`).
@@ -86,6 +96,73 @@ X = sparse_coding(OrthogonalMatchingPursuit(max_nnz=25), Y, basis)
 
 [Matching Pursuit](https://en.wikipedia.org/wiki/Matching_pursuit) derives X from D and Y such that DX = Y in constraint that X be as sparse as possible.
 
+## Using KSVD.jl from Python
+
+The main functionality of KSVD.jl can be used from Python via `juliacall`. Here's a basic example:
+
+```python
+import numpy, torch
+import juliacall; jl = juliacall.Main
+jl.seval("""
+    using KSVD
+""")
+
+Y = torch.rand(128, 5_000, dtype=torch.float32)
+# numpy arrays are understood by Julia
+res = jl.ksvd(Y.numpy(), 256, 3)  # m=256, k=3
+print(res.D, res.X)
+
+# Convert back to PyTorch tensors
+Dtorch = torch.from_numpy(numpy.array(res.D))
+Xtorch = torch.sparse_csc_tensor(res.X.colptr, res.X.rowval, res.X.nzval, 
+                                 size=(res.X.m, res.X.n), dtype=torch.float32)
+```
+
+### Multi-threading from Python
+
+To use all available threads when calling from Python, set these environment variables before importing `juliacall`:
+
+```python
+import os
+# Enable signal handling (disables Ctrl-C in Python, caught by Julia instead)
+os.environ["PYTHON_JULIACALL_HANDLE_SIGNALS"]="yes"
+# Use all available CPU threads
+os.environ["PYTHON_JULIACALL_THREADS"]="auto"
+
+import juliacall
+# continue as before...
+```
+
+### GPU Acceleration
+
+For GPU acceleration, first add the CUDA package:
+
+```python
+jl.seval("""
+import Pkg; Pkg.add("CUDA")
+using KSVD, KSVD.OhMyThreads, CUDA
+""")
+```
+
+Then use CUDA-accelerated methods:
+
+```python
+D = jl.KSVD.init_dictionary(jl.Float32, 128, 256)
+sparse_coding_method = jl.KSVD.CUDAAcceleratedMatchingPursuit(max_nnz=3)
+X = jl.sparse_coding(sparse_coding_method, Y.numpy(), D)
+
+ksvd_update_method = jl.BatchedParallelKSVD[False, jl.Float32, jl.OhMyThreads.DynamicScheduler, jl.KSVD.CUDAAcceleratedArnoldiSVDSolver[jl.Float32]]()
+res = jl.ksvd(Y.numpy(), 256, sparse_coding_method=sparse_coding_method, ksvd_update_method=ksvd_update_method)
+```
+
+You can also use PyTorch for some GPU operations and pass results back to Julia:
+
+```python
+D = jl.KSVD.init_dictionary(jl.Float32, 128, 256)
+Ddev = torch.from_numpy(numpy.array(D)).to('cuda')
+DtD = (Ddev.T @ Ddev).cpu().numpy()
+X = jl.sparse_coding(Y.numpy(), D, 3, DtD=DtD)
+```
 
 # Performance improvements
 
