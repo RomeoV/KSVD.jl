@@ -55,7 +55,9 @@ TimerOutputs.enable_debug_timings(KSVD)
 (; D, X) = ksvd(Y, n, nnzpercol; show_trace=true)
 ```
 
-# we can control the matching pursuit stage and ksvd stage through method structs
+We can control the matching pursuit stage and ksvd stage through method structs:
+
+```julia
 ksvd_update_method = BatchedParallelKSVD{false, Float64}(shuffle_indices=true, batch_size_per_thread=1)
 sparse_coding_method = ParallelMatchingPursuit(max_nnz=25, rtol=5e-2)
 result = ksvd(Y, 256;
