@@ -4,7 +4,7 @@ module KSVD
 # The original paper:
 # K-SVD: An Algorithm for Designing Overcomplete Dictionaries
 # for Sparse Representation
-# http://www.cs.technion.ac.il/~freddy/papers/120.pdf
+# https://doi.org/10.1109/TSP.2006.881199
 
 # Variable names are based on the original paper.
 # If you try to read the code, I recommend you to see Figure 2 first.
