@@ -7,6 +7,7 @@ struct NormalLoop <: KSVDLoopType end
     log2min::Int = 6
 end
 
+computesmallestlog2min(m, targetnnz) = Int(log2(m) - (targetnnz - 1))
 
 """
     ksvd_loop!(
@@ -84,8 +85,13 @@ function ksvd_loop!(
     E = copy(Y)
     X_slices = typeof(X)[]
 
-    Msets = constructM(size(D, 2); log2min=ksvd_loop_method.log2min)
+    (; log2min) = ksvd_loop_method
     nnzbudget = sparse_coding_method.max_nnz
+    if ksvd_loop_method.log2min < computesmallestlog2min(size(D, 2), nnzbudget)
+        log2min = computesmallestlog2min(size(D, 2), nnzbudget)
+        @warn "ksvd_loop_method.log2min < computesmallestlog2min(size(D, 2), nnzbudget). Setting log2min to $(log2min)." maxlog = 1
+    end
+    Msets = constructM(size(D, 2); log2min=log2min)
     localnnzbudget = ceil(Int, nnzbudget / length(Msets))
     sparse_coding_method′ = @set sparse_coding_method.max_nnz = localnnzbudget
 
