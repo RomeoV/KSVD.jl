@@ -7,7 +7,7 @@ Sets the number of threads used in sparse csr matrix - vector multiplication.
 """
 function set_num_threads(n::Int)
 
-    0 < n <=  Threads.nthreads(Threads.threadpool()) || throw(DomainError("The numbers of threads must be > 0 and <= $(Threads.nthreads(Threads.threadpool()))."))
+    0 < n <= Threads.nthreads() || throw(DomainError("The numbers of threads must be > 0 and <= $(Threads.nthreads())."))
 
     KSVD.num_threads[] = n
 
