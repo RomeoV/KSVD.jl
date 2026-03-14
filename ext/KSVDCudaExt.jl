@@ -30,6 +30,7 @@ CPU->GPU and GPU->CPU, aswell as the computation on the CPU, are pipelined.
 function KSVD.sparse_coding(method::KSVD.CUDAAcceleratedMatchingPursuit,
     data::AbstractMatrix{T}, dictionary::AbstractMatrix{T};
     timer=TimerOutput(),
+    nonneg::Bool=false,
     DtD=let Ddev = cu(dictionary)
         Matrix(Ddev' * Ddev)
     end) where {T}
@@ -76,7 +77,7 @@ function KSVD.sparse_coding(method::KSVD.CUDAAcceleratedMatchingPursuit,
         refit_coeffs=method.refit_coeffs)
 
     mapreduce(hcat, zip(idx_batches, ch_DtoH)) do (idx, DtYslice)
-        KSVD.sparse_coding(noncudamethod, @view(data[:, idx]), dictionary; DtD, DtY=DtYslice, timer)
+        KSVD.sparse_coding(noncudamethod, @view(data[:, idx]), dictionary; DtD, DtY=DtYslice, timer, nonneg)
     end
 end
 

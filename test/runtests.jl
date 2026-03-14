@@ -20,6 +20,52 @@ end
     @test true
 end
 
+@testset "Non-negative coefficients" begin
+    Random.seed!(42)
+    T = Float32
+
+    @testset "Sparse coding produces non-negative coefficients" begin
+        d, m, n = 64, 128, 200
+        D = KSVD.init_dictionary(T, d, m)
+        # Ground truth with positive coefficients (init_sparse_assignment_mat produces values in [1, 2))
+        Xtrue = KSVD.init_sparse_assignment_mat(T, m, n, 3)
+        Y = D * Xtrue
+        DtD = D' * D
+
+        @testset for method in [
+            ParallelMatchingPursuit(; max_nnz=3, refit_coeffs=false),
+            ParallelMatchingPursuit(; max_nnz=3, refit_coeffs=true),
+            KSVD.MatchingPursuit(; max_nnz=3, refit_coeffs=false),
+            OrthogonalMatchingPursuit(; max_nnz=3),
+            LegacyMatchingPursuit(; max_nnz=3),
+        ]
+            Xest = sparse_coding(method, Y, D; DtD, nonneg=true)
+            @test all(>=(0), nonzeros(Xest))
+        end
+    end
+
+    @testset "Full ksvd with nonneg=true" begin
+        data = rand(T, 32, 256)
+        result = ksvd(data, 64; maxiters=5, nonneg=true)
+        @test all(>=(0), nonzeros(result.X))
+    end
+
+    @testset "Nonneg feature grid" begin
+        data = rand(T, 32, 256)
+        @testset for ksvd_update_method in [LegacyKSVD(), BatchedParallelKSVD{false,T}()],
+            sparse_coding_method in [
+                ParallelMatchingPursuit(; max_nnz=3),
+                OrthogonalMatchingPursuit(; max_nnz=3),
+            ]
+
+            result = ksvd(data, 64;
+                sparse_coding_method, ksvd_update_method,
+                maxiters=3, nonneg=true)
+            @test all(>=(0), nonzeros(result.X))
+        end
+    end
+end
+
 @testset "Test feature grid" begin
     T = Float32
     ksvd_update_methods = [

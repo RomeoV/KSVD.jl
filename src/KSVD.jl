@@ -80,6 +80,7 @@ function, e.g. to compute other losses or store intermediate solutions.
 - `maxtime::Union{Nothing, <:Real}=nothing`: Maximum time limit (in seconds)
 - `abstol::Number`: Absolute tolerance for convergence
 - `reltol::Number`: Relative tolerance for convergence
+- `nonneg::Bool=false`: If true, constrain all coefficients in X to be non-negative
 - `nnz_per_col_target::Int=0`: Target number of non-zero entries per column
 - `show_trace::Bool=false`: If true, show trace of the optimization
 
@@ -104,6 +105,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
     D_init::Union{Nothing,<:AbstractMatrix{T}}=nothing,
     X_init::Union{Nothing,<:AbstractSparseMatrix}=nothing,
     minibatch_size=nothing,
+    nonneg::Bool=false,
     # termination conditions
     maxiters::Int=100,
     maxtime::Union{Nothing,<:Real}=nothing,
@@ -124,7 +126,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         D = (isnothing(D_init) ? init_dictionary(T, emb_dim, n_atoms) : copy(D_init))  # size(D) == (n, K)
         @assert all(≈(1.0), norm.(eachcol(D)))
     end
-    X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer) : copy(X_init))
+    X = (isnothing(X_init) ? sparse_coding(sparse_coding_method, Y, D; timer, nonneg) : copy(X_init))
 
     # progressbar = Progress(maxiter)
     # in general, we support to preallocate error buffers E_Ω that are not as wide as Y, but instead
@@ -163,7 +165,7 @@ function ksvd(Y::AbstractMatrix{T}, n_atoms::Int, max_nnz=max(3, n_atoms ÷ 100)
         # note that D gets updated in place
         yidx = (isnothing(minibatch_size) ? axes(Y, 2) : sort(shuffle(axes(Y, 2))[1:minibatch_size]))
         X = ksvd_loop!(ksvd_loop_type, ksvd_update_method, sparse_coding_method,
-            Y, D, X; timer, yidx, verbose)
+            Y, D, X; timer, yidx, verbose, nonneg)
 
         # put a task to compute the trace / termination conditions.
         push!(trace_channel, (iter, copy(D), copy(X)))

@@ -86,10 +86,10 @@ function validate_mp_args(max_nnz, max_iter, rtol, other_args...)
 end
 
 function sparse_coding(data::AbstractMatrix, dictionary::AbstractMatrix, max_nnz=max(size(dictionary, 2) ÷ 10, 1);
-    timer=TimerOutput(), DtD=nothing, sparse_coding_kwargs...)
+    timer=TimerOutput(), DtD=nothing, nonneg::Bool=false, sparse_coding_kwargs...)
 
     sparse_coding_method = ParallelMatchingPursuit(; max_nnz, sparse_coding_kwargs...)
-    sparse_coding(sparse_coding_method, data, dictionary; DtD, timer)
+    sparse_coding(sparse_coding_method, data, dictionary; DtD, timer, nonneg)
 end
 
 get_method_map_fn(::MatchingPursuit) = map
@@ -103,7 +103,8 @@ get_method_map_fn(::OrthogonalMatchingPursuit) = tmap
 Find ``X`` such that ``DX = Y`` or ``DX ≈ Y`` where Y is `data` and D is `dictionary`.
 """
 function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,OrthogonalMatchingPursuit},
-    data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput(), DtD=nothing, DtY=nothing) where {T}
+    data::AbstractMatrix{T}, dictionary::AbstractMatrix{T}; timer=TimerOutput(), DtD=nothing, DtY=nothing,
+    nonneg::Bool=false) where {T}
     @timeit_debug timer "Sparse coding" begin
 
         map_fn = get_method_map_fn(method)
@@ -118,14 +119,15 @@ function sparse_coding(method::Union{MatchingPursuit,ParallelMatchingPursuit,Ort
         end
 
         @timeit_debug timer "matching pursuit" begin
-            X_ = let DtD = DtD  # avoid boxing: https://juliafolds2.github.io/OhMyThreads.jl/stable/literate/boxing/boxing/#Non-race-conditon-boxed-variables
+            X_ = let DtD = DtD, nonneg = nonneg  # avoid boxing
                 map_fn(czip(eachcol(data), eachcol(products))) do (datacol, productcol)
                     matching_pursuit_(
                         method,
                         datacol,
                         dictionary,
                         DtD;
-                        products_init=(method.precompute_products ? productcol : nothing)
+                        products_init=(method.precompute_products ? productcol : nothing),
+                        nonneg
                     )
                 end
             end
@@ -151,30 +153,26 @@ function matching_pursuit_(
     method::Union{OrthogonalMatchingPursuit},
     data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
     products_init::Union{Nothing,AbstractVector{T}}=nothing,
+    nonneg::Bool=false,
     debug=false) where {T}
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
     residual = copy(data)
-    # xdict = DefaultDict{Int, T}(zero(T))
     norm_data = norm(data)
 
     products_init = (isnothing(products_init) ? (dictionary' * residual) : products_init)
     products = copy(products_init)
     products_abs = abs.(products)  # prealloc
-    # A_inv = zeros(T, 0, 0)
     A = zeros(T, 0, 0)
     inds = Int[]
     factors = T[]
-    # atoms = Vector{T}[]
     b_k = zeros(T, 0)
     v_k = zeros(T, 0)
     dicts_chosen_buf = zeros(T, size(dictionary, 1), max_nnz)
     DtD_chosen_buf = zeros(T, size(dictionary, 2), max_nnz)
-    # reconstruction = zeros(T, size(data))
 
     # will mask out "used indices" when finding next basis vector
-    # mask = ones(Bool, size(products))
     mask = BitArray(undef, size(products))
     mask .= 1
 
@@ -184,8 +182,14 @@ function matching_pursuit_(
         end
 
         # find an atom with maximum inner product
-        products_abs .= abs.(products)
-        _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
+        if nonneg
+            products_abs .= ifelse.(mask, products, T(-Inf))
+            _, maxindex = findmax_fast(products_abs)
+            products[maxindex] <= 0 && return SparseArrays.sparsevec(inds, factors, n_atoms)
+        else
+            products_abs .= abs.(products)
+            _, maxindex = findmax_fast(products_abs .* mask)  # make sure to not pick used index
+        end
         dicts_chosen_buf[:, i] .= @view dictionary[:, maxindex]
         DtD_chosen_buf[:, i] .= @view DtD[:, maxindex]
         dicts_chosen = @view dicts_chosen_buf[:, 1:i]
@@ -246,16 +250,18 @@ products[t+1] = dictionary' * (residual[t] - dictionary[idx] * a)
 ```
 """
 
-function refitcoefficients!(x::SparseVector, y, D)
+function refitcoefficients!(x::SparseVector, y, D; nonneg::Bool=false)
     local_basis = @view D[:, nonzeroinds(x)]
     x.nzval .= (local_basis \ y)
+    nonneg && clamp!(x.nzval, zero(eltype(x)), typemax(eltype(x)))
     return x
 end
 
 @inbounds function matching_pursuit_(
     method::Union{MatchingPursuit,ParallelMatchingPursuit,GPUAcceleratedMatchingPursuit},
     data::AbstractVector{T}, dictionary::AbstractMatrix{T}, DtD::AbstractMatrix{T};
-    products_init::Union{Nothing,AbstractVector{T}}=nothing) where {T}
+    products_init::Union{Nothing,AbstractVector{T}}=nothing,
+    nonneg::Bool=false) where {T}
     (; max_nnz, max_iter, rtol) = method
 
     n_atoms = size(dictionary, 2)
@@ -267,27 +273,30 @@ end
     products_abs = abs.(products)  # prealloc
 
     for i in 1:max_iter
-        # @assert(norm(residual)) && @show norm(residual), residual
-        # @assert(isfinite(norm_data))
         if norm(residual) == 0 || norm(residual) / norm_data < rtol
             x = sparsevec(xdict, n_atoms)
-            method.refit_coeffs && refitcoefficients!(x, data, dictionary)
+            method.refit_coeffs && refitcoefficients!(x, data, dictionary; nonneg)
             return x
         end
         if length(xdict) > max_nnz
-            pop!(xdict, findmin(abs, xdict)[2])
+            pop!(xdict, (nonneg ? findmin(xdict) : findmin(abs, xdict))[2])
             x = sparsevec(xdict, n_atoms)
-            method.refit_coeffs && refitcoefficients!(x, data, dictionary)
+            method.refit_coeffs && refitcoefficients!(x, data, dictionary; nonneg)
             return x
         end
 
         # find an atom with maximum inner product
-        products_abs .= abs.(products)
-        _, maxindex = findmax_fast(products_abs)
+        if nonneg
+            products_abs .= products
+            _, maxindex = findmax_fast(products_abs)
+            products[maxindex] <= 0 && break  # no positive correlation left
+        else
+            products_abs .= abs.(products)
+            _, maxindex = findmax_fast(products_abs)
+        end
 
         a = products[maxindex]
         atom = @view dictionary[:, maxindex]
-        # @assert norm(atom) ≈ 1. norm(atom)
 
         residual .-= a .* atom
         products .-= a .* @view DtD[:, maxindex]
@@ -295,7 +304,7 @@ end
         xdict[maxindex] += a
     end
     x = sparsevec(xdict, n_atoms)
-    method.refit_coeffs && refitcoefficients!(x, data, dictionary)
+    method.refit_coeffs && refitcoefficients!(x, data, dictionary; nonneg)
     return x
 end
 
@@ -304,7 +313,7 @@ numerical comparison and didactic purposes.
 `DtD` and `DtY` are just available for API completeness.
 """
 function sparse_coding(method::LegacyMatchingPursuit, data::AbstractMatrix{T}, dictionary::AbstractMatrix{T};
-    DtD=nothing, DtY=nothing, timer=TimerOutput()) where {T}
+    DtD=nothing, DtY=nothing, timer=TimerOutput(), nonneg::Bool=false) where {T}
     @timeit_debug timer "Sparse coding" begin
 
         K = size(dictionary, 2)
@@ -316,7 +325,8 @@ function sparse_coding(method::LegacyMatchingPursuit, data::AbstractMatrix{T}, d
             X[:, i] = matching_pursuit_(
                 method,
                 vec(data[:, i]),
-                dictionary
+                dictionary;
+                nonneg
             )
         end
 
@@ -326,7 +336,8 @@ end
 
 function matching_pursuit_(method::LegacyMatchingPursuit,
     data::AbstractVector{T},
-    dictionary::AbstractMatrix{T}) where {T}
+    dictionary::AbstractMatrix{T};
+    nonneg::Bool=false) where {T}
     (; max_nnz, max_iter, rtol) = method
     n_atoms = size(dictionary, 2)
 
@@ -339,14 +350,19 @@ function matching_pursuit_(method::LegacyMatchingPursuit,
             return sparsevec(xdict, n_atoms)
         end
         if length(xdict) > max_nnz
-            pop!(xdict, findmin(abs, xdict)[2])
+            pop!(xdict, (nonneg ? findmin(xdict) : findmin(abs, xdict))[2])
             return sparsevec(xdict, n_atoms)
         end
 
         # find an atom with maximum inner product
         products = dictionary' * residual
-        _, maxindex = findmax(abs.(products))
-        maxval = products[maxindex]
+        if nonneg
+            maxval, maxindex = findmax(products)
+            maxval <= 0 && break
+        else
+            _, maxindex = findmax(abs.(products))
+            maxval = products[maxindex]
+        end
         atom = dictionary[:, maxindex]
 
         # c is the length of the projection of data onto atom

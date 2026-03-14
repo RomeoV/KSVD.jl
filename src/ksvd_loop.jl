@@ -38,12 +38,13 @@ function ksvd_loop!(
     X;
     timer=TimerOutput(),
     yidx=axes(Y, 2),
-    verbose=false
+    verbose=false,
+    nonneg::Bool=false
 )
     verbose && @info "Starting svd"
-    ksvd_update(ksvd_update_method, maybeview(Y, :, yidx), D, X[:, yidx]; timer)
+    ksvd_update(ksvd_update_method, maybeview(Y, :, yidx), D, X[:, yidx]; timer, nonneg)
     verbose && @info "Starting sparse coding"
-    X = sparse_coding(sparse_coding_method, Y, D; timer)
+    X = sparse_coding(sparse_coding_method, Y, D; timer, nonneg)
 end
 
 """
@@ -80,7 +81,8 @@ function ksvd_loop!(
     X;
     timer=TimerOutput(),
     yidx=axes(Y, 2),
-    verbose=false
+    verbose=false,
+    nonneg::Bool=false
 )
     E = copy(Y)
     X_slices = typeof(X)[]
@@ -99,9 +101,9 @@ function ksvd_loop!(
         D′ = @view D[:, midx]
         X′ = copy(X[midx, :])
         verbose && @info "Running ksvd update for $(midx)"
-        ksvd_update(ksvd_update_method, maybeview(E, :, yidx), D′, X′[:, yidx]; timer)
+        ksvd_update(ksvd_update_method, maybeview(E, :, yidx), D′, X′[:, yidx]; timer, nonneg)
         verbose && @info "Running sparse coding"
-        X′ = sparse_coding(sparse_coding_method′, E, D′; timer)
+        X′ = sparse_coding(sparse_coding_method′, E, D′; timer, nonneg)
         E .-= D′ * X′
         push!(X_slices, X′)
     end
@@ -118,12 +120,12 @@ constructM(K; log2min=6) =
     end
 
 function sparse_coding_matryoshka(Y::AbstractMatrix{T}, D, max_nnz;
-    log2min=8, DtD=D' * D, DtY=D' * Y) where {T}
-    sparse_coding_matryoshka(ParallelMatchingPursuit(; max_nnz), Y, D; log2min, DtD, DtY)
+    log2min=8, DtD=D' * D, DtY=D' * Y, nonneg::Bool=false) where {T}
+    sparse_coding_matryoshka(ParallelMatchingPursuit(; max_nnz), Y, D; log2min, DtD, DtY, nonneg)
 end
 
 function sparse_coding_matryoshka(sparse_coding_method::SparseCodingMethod,
-    Y::AbstractMatrix{T}, D; log2min=8, DtD=D' * D, DtY=D' * Y) where {T}
+    Y::AbstractMatrix{T}, D; log2min=8, DtD=D' * D, DtY=D' * Y, nonneg::Bool=false) where {T}
     E = copy(Y)
     X_slices = SparseMatrixCSC{T}[]
 
@@ -136,7 +138,7 @@ function sparse_coding_matryoshka(sparse_coding_method::SparseCodingMethod,
         D′ = @view D[:, midx]
         D′tD′ = @view DtD[midx, midx]
         D′tY = @view DtY[midx, :]
-        X′ = sparse_coding(sparse_coding_method′, E, D′; DtD=D′tD′, DtY=D′tY)
+        X′ = sparse_coding(sparse_coding_method′, E, D′; DtD=D′tD′, DtY=D′tY, nonneg)
         E .-= D′ * X′
         push!(X_slices, X′)
     end

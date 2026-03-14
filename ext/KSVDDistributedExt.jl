@@ -34,7 +34,7 @@ end
 
 
 function KSVD.ksvd_update(method::DistributedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
-                          reinitialize_buffers=false) where T
+                          reinitialize_buffers=false, nonneg::Bool=false) where T
     # the revised plan:
     # Let's assume we already do a good job for moderately sized datasets.
     # Now, we may have a very large number of datapoints.
@@ -61,7 +61,7 @@ function KSVD.ksvd_update(method::DistributedKSVD, Y::AbstractMatrix{T}, D::Abst
     Ds_Xs = pmap(X_Y_batches, Iterators.repeated(D), Iterators.repeated(method)) do (X_, Y_), D, method
         # we have some problems with memory leaks, so we reinit the buffers here...
         let method_ = method.submethod_per_worker[myid()]
-            ksvd_update(method_, Y_, copy(D), X_)
+            ksvd_update(method_, Y_, copy(D), X_; nonneg)
         end
     end
     Ds = getindex.(Ds_Xs, 1)

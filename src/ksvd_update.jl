@@ -9,7 +9,7 @@ import Base.Threads: nthreads, threadpool
 import TSVD: tsvd
 
 # set a default
-ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, timer=TimerOutput()) = ksvd_update(OptimizedKSVD(), Y, D, X, timer)
+ksvd_update(Y::AbstractMatrix, D::AbstractMatrix, X::AbstractMatrix, timer=TimerOutput(); kwargs...) = ksvd_update(OptimizedKSVD(), Y, D, X; timer, kwargs...)
 
 """
     ksvd_update(method::ParallelKSVD{false}, Y, D, X)
@@ -33,7 +33,7 @@ by only having to compute the last part, and "resetting it" after using the resu
 # TODO: This should probably be called `ksvd_update!` and note that it modifies D and X!
 """
 function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
-    force_reinitialize_buffers::Bool=false, timer=TimerOutput(), merge_all_timers=false) where {T}
+    force_reinitialize_buffers::Bool=false, timer=TimerOutput(), merge_all_timers=false, nonneg::Bool=false) where {T}
     @timeit_debug timer "KSVD update" begin
 
         if force_reinitialize_buffers || !is_initialized(method)
@@ -69,12 +69,12 @@ function ksvd_update(method::ThreadedKSVDMethod, Y::AbstractMatrix{T}, D::Abstra
         @timeit_debug timer "Inner loop" begin
             @inbounds for index_batch in index_batches  # <- This is just one big batch for `ParallelKSVD`
                 # avoid boxing: https://juliafolds2.github.io/OhMyThreads.jl/stable/literate/boxing/boxing/#Non-race-conditon-boxed-variables
-                @localize E_Ω_buf_ch timer_ch E D_cpy X_cpy tforeach(index_batch; scheduler) do k
+                @localize E_Ω_buf_ch timer_ch E D_cpy X_cpy nonneg tforeach(index_batch; scheduler) do k
                     # we use channels to manage the batch-local variables
                     E_Ω_buf = take!(E_Ω_buf_ch)
                     timer_ = take!(timer_ch)
                     try
-                        ksvd_update_k!(method, E_Ω_buf, D_cpy, X_cpy, E, Y, D, X, k, timer_)
+                        ksvd_update_k!(method, E_Ω_buf, D_cpy, X_cpy, E, Y, D, X, k, timer_; nonneg)
                     catch e
                         handle_ksvd_update_error(e, D_cpy, k)
                     end
@@ -104,7 +104,7 @@ end
 
 # This is the main composition method!
 function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T}, D_cpy, X_cpy, E, Y, D, X, k,
-    timer=TimerOutput()) where {T}
+    timer=TimerOutput(); nonneg::Bool=false) where {T}
     @timeit_debug timer "ksvd_update_k!" begin
 
         @timeit_debug timer "find nonzeros" begin
@@ -114,10 +114,8 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
                 # We write to `D_cpy`, which will later get copied into `D`.
                 randn!(@view(D_cpy[:, k]))
                 normalize!(@view(D_cpy[:, k]), 2)
-                # D_cpy[:, k] .= D[:, k];
                 return
             end
-            # ωₖ = findall(!iszero, xₖ)
             ωₖ = nonzeroinds(xₖ)
         end
 
@@ -129,6 +127,9 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
             ωₖ = ωₖ[1:size(E_Ω_buf, 2)]
         end
         E_Ω = compute_E_Ω!(method, E_Ω_buf, E, Y, D, X, xₖ, ωₖ, k, timer)
+
+        # Save E_Ω before destructive SVD when nonneg (svd! overwrites E_Ω)
+        E_Ω_copy = nonneg ? copy(E_Ω) : E_Ω
 
         @timeit_debug timer "compute and copy svd" begin
             # truncated svd has some problems for column matrices. so then we just do svd.
@@ -147,8 +148,29 @@ function ksvd_update_k!(method::ThreadedKSVDMethod, E_Ω_buf::AbstractMatrix{T},
             # Finally, sometimes =U[1, 1]= is zero! Then sign(U[1,1]) would be zero... not good.
             # Instead we use =signbit= check to make sure we never zero out `U`.
             sgn = (signbit(U[1, 1]) ? -1 : 1)
-            D_cpy[:, k] .= sgn .* @view(U[:, 1])
-            X_cpy[k, ωₖ] .= (sgn * S[1]) .* @view(V[:, 1])
+            d_new = sgn .* @view(U[:, 1])
+            x_new = (sgn * S[1]) .* @view(V[:, 1])
+
+            if nonneg
+                # Alternating non-negative rank-1 approximation.
+                # Iteratively project coefficients to non-negative and re-optimize the atom.
+                x_new = max.(x_new, zero(T))
+                if !all(iszero, x_new)
+                    d_buf = similar(d_new)
+                    for _ in 1:3
+                        mul!(d_buf, E_Ω_copy, x_new)
+                        nrm = norm(d_buf)
+                        nrm > 0 || break
+                        d_buf ./= nrm
+                        mul!(x_new, E_Ω_copy', d_buf)
+                        x_new .= max.(x_new, zero(T))
+                    end
+                    d_new = d_buf
+                end
+            end
+
+            D_cpy[:, k] .= d_new
+            X_cpy[k, ωₖ] .= x_new
         end
 
     end  # @timeit

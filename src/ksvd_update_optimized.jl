@@ -1,6 +1,7 @@
 import SparseArrays: nonzeroinds
 
-@inbounds function ksvd_update(method::OptimizedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T}; timer=TimerOutput()) where {T}
+@inbounds function ksvd_update(method::OptimizedKSVD, Y::AbstractMatrix{T}, D::AbstractMatrix{T}, X::AbstractMatrix{T};
+    timer=TimerOutput(), nonneg::Bool=false) where {T}
     @timeit_debug timer "KSVD update" begin
         # Eₖ = Y - D * X
         E_buffer = similar(Y) .* false  # set to 0. Note that (.*0) doesn't work with NaN.
@@ -24,22 +25,41 @@ import SparseArrays: nonzeroinds
                     E_Ω .= @view Y[:, ωₖ]
                 end
                 @timeit_debug timer "E -= D X" begin
-                    # E_Ω .-= D * X[:, ωₖ]
                     fastdensesparsemul_threaded!(E_Ω, D, X[:, ωₖ], -1, 1)
                 end
                 @timeit_debug timer "E += D_k X_k" begin
-                    # E_Ω .+= @view(D[:, k]) * nonzeros(xₖ)'
                     fastdensesparsemul_outer_threaded!(E_Ω, @view(D[:, k]), xₖ[ωₖ], true, true)
                 end
             end
 
+            E_Ω_copy = nonneg ? copy(E_Ω) : E_Ω
+
             @timeit_debug timer "svd step" begin
                 U, S, V = (size(E_Ω, 2) < 3 ? svd!(E_Ω) : compute_truncated_svd(method.svd_solver, E_Ω, 1))
-                # U, S, V = (size(E_Ω, 2) <= 3 ? svd!(E_Ω) : krylov_svd(E_Ω, 1; tol=1e-10))
             end
             @timeit_debug timer "update D and X" begin
-                D[:, k] .= sign(U[1, 1]) .* @view(U[:, 1])
-                X[k, ωₖ] .= (sign(U[1, 1]) * S[1]) .* @view(V[:, 1])
+                sgn = sign(U[1, 1])
+                d_new = sgn .* @view(U[:, 1])
+                x_new = (sgn * S[1]) .* @view(V[:, 1])
+
+                if nonneg
+                    x_new = max.(x_new, zero(T))
+                    if !all(iszero, x_new)
+                        d_buf = similar(d_new)
+                        for _ in 1:3
+                            mul!(d_buf, E_Ω_copy, x_new)
+                            nrm = norm(d_buf)
+                            nrm > 0 || break
+                            d_buf ./= nrm
+                            mul!(x_new, E_Ω_copy', d_buf)
+                            x_new .= max.(x_new, zero(T))
+                        end
+                        d_new = d_buf
+                    end
+                end
+
+                D[:, k] .= d_new
+                X[k, ωₖ] .= x_new
             end
         end
 
